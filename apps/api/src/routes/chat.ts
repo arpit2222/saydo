@@ -15,6 +15,7 @@ import {
   ChatMessage 
 } from '../lib/agent/agent.js';
 import { getNebiusClient, NEBIUS_MODELS } from '../lib/nebius.js';
+import { searchDocs } from '../lib/tavily.js';
 import { evaluate, PolicyEvaluationResult, SkillDefinition, PolicyRule } from '@saydo/shared';
 import { logger } from '../lib/logger.js';
 
@@ -224,7 +225,15 @@ ${activeSkills.map((s) => `- ${s.name}: ${s.description || s.title} [${s.method}
       }
     }
 
-    if (promptLower.includes('application') || promptLower.includes('pending')) {
+    if (promptLower.includes('reopen') || promptLower.includes('can i') || promptLower.includes('how do i') || promptLower.includes('rule') || promptLower.includes('documentation') || promptLower.includes('policy')) {
+      rawToolCall = {
+        id: `call-${Date.now()}`,
+        function: {
+          name: 'ask_docs',
+          arguments: JSON.stringify({ question: latestUserPrompt }),
+        },
+      };
+    } else if (promptLower.includes('application') || promptLower.includes('pending')) {
       rawToolCall = {
         id: `call-${Date.now()}`,
         function: {
@@ -295,6 +304,22 @@ ${activeSkills.map((s) => `- ${s.name}: ${s.description || s.title} [${s.method}
     return res.json({
       type: 'message',
       text: question,
+      plan: currentPlan,
+      run_id: runId,
+    });
+  }
+
+  if (rawToolCall?.function?.name === 'ask_docs') {
+    let question = latestUserPrompt;
+    try {
+      const parsed = JSON.parse(rawToolCall.function.arguments);
+      question = parsed.question || question;
+    } catch {}
+    const docsResult = await searchDocs(question, app.docs_url || 'https://saydo.app/docs');
+    return res.json({
+      type: 'message',
+      text: docsResult.answer,
+      sources: docsResult.sources,
       plan: currentPlan,
       run_id: runId,
     });

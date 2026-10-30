@@ -58,7 +58,7 @@ export const SkillDefinitionSchema = z.object({
   verify_with: z.string().nullable().optional(),
   source_recording: z.string().uuid().nullable().optional(),
   narration: z.string().nullable().optional(),
-  status: z.enum(['active', 'drifted', 'disabled']).default('active'),
+  status: z.enum(['active', 'drifted', 'disabled', 'at_risk']).default('active'),
 });
 
 export const NetworkCapturedEventSchema = z.object({

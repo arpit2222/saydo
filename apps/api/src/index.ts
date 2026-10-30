@@ -11,6 +11,8 @@ import { compileRouter } from './routes/compile.js';
 import { skillsRouter } from './routes/skills.js';
 import { policiesRouter } from './routes/policies.js';
 import { chatRouter } from './routes/chat.js';
+import { discoverRouter } from './routes/discover.js';
+import { driftRouter } from './routes/drift.js';
 import { getAppByPublicKey } from './lib/supabase.js';
 
 const app: Express = express();
@@ -83,6 +85,12 @@ app.use('/v1/policies', policiesRouter);
 
 // Agent Chat & Execution
 app.use('/v1/chat', chatRouter);
+
+// Tavily Discover
+app.use('/v1/discover', discoverRouter);
+
+// Tavily Drift Watch
+app.use('/v1/drift', driftRouter);
 
 // Base route
 app.get('/', (_req: Request, res: Response) => {

@@ -10,6 +10,7 @@ export interface ChatItem {
   id: string;
   role: 'user' | 'assistant' | 'tool';
   text?: string;
+  sources?: Array<{ title?: string; url?: string; content?: string }>;
   toolCall?: {
     call_id: string;
     skill: string;
@@ -359,6 +360,7 @@ class SayDoSDK {
           id: `msg-${Date.now()}`,
           role: 'assistant',
           text: data.text,
+          sources: data.sources,
           verified: data.verified,
           verificationNote: data.verification_note,
         });
@@ -1029,6 +1031,9 @@ class SayDoSDK {
                 : `
               <div style="font-size: 11px; color: #94a3b8; font-weight: 600;">SUGGESTED PROMPTS</div>
               <div class="saydo-chips">
+                <button class="saydo-chip" data-prompt="Can I reopen a rejected application?">
+                  📚 Can I reopen a rejected application? (Tavily Docs)
+                </button>
                 <button class="saydo-chip" data-prompt="Create Website Revamp with 2 lakh budget and invite arpit@dehix.org as editor">
                   ⚡ Create Website Revamp (2L) & invite arpit@dehix.org
                 </button>
@@ -1133,6 +1138,29 @@ class SayDoSDK {
                 return `
                   <div class="saydo-msg-assistant">
                     <div>${item.text}</div>
+                    ${
+                      item.sources && item.sources.length > 0
+                        ? `
+                      <div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed #334155;">
+                        <div style="font-size: 10px; color: #94a3b8; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;">
+                          <span>🔍 Tavily Grounded Sources:</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                          ${item.sources
+                            .map(
+                              (s: any) => `
+                            <a href="${s.url}" target="_blank" style="font-size: 10px; color: #60a5fa; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); padding: 2px 6px; border-radius: 4px; text-decoration: none; display: inline-flex; align-items: center; gap: 3px;" title="${s.content || ''}">
+                              <span>📄</span>
+                              <span>${s.title || 'Documentation'}</span>
+                            </a>
+                          `
+                            )
+                            .join('')}
+                        </div>
+                      </div>
+                    `
+                        : ''
+                    }
                     ${
                       item.verified
                         ? `<div class="saydo-badge-verified">✓ ${item.verificationNote || 'Verified in system'}</div>`

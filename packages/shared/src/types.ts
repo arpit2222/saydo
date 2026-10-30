@@ -55,7 +55,7 @@ export interface SkillDefinition {
   verify_with?: string | null;
   source_recording?: string | null;
   narration?: string | null;
-  status: 'active' | 'drifted' | 'disabled';
+  status: 'active' | 'drifted' | 'disabled' | 'at_risk';
 }
 
 export interface NetworkCapturedEvent {
