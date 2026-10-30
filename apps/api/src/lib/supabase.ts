@@ -250,6 +250,8 @@ export const mockDb = {
   ]),
   runs: new Map<string, any>(),
   run_steps: new Map<string, any>(),
+  health_checks: new Map<string, any>(),
+  eval_results: new Map<string, any>(),
 };
 
 export async function getAppByPublicKey(publicKey: string) {
@@ -520,6 +522,93 @@ export async function getRunSteps(run_id: string) {
   }
 
   return Array.from(mockDb.run_steps.values()).filter((s) => s.run_id === run_id).sort((a, b) => a.idx - b.idx);
+}
+
+export async function saveHealthCheck(data: {
+  app_id: string;
+  skill_id: string;
+  skill_name: string;
+  method: string;
+  path: string;
+  status: 'pass' | 'fail' | 'diff';
+  diff?: any;
+  latency_ms: number;
+  http_status: number;
+  response_sample?: any;
+}) {
+  const sb = getSupabase();
+  const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `hc-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  const record = {
+    id,
+    ...data,
+    checked_at: new Date().toISOString(),
+  };
+
+  if (sb) {
+    const { data: inserted, error } = await sb.from('health_checks').insert([record]).select().single();
+    if (!error && inserted) return inserted;
+  }
+
+  mockDb.health_checks.set(id, record);
+  return record;
+}
+
+export async function getHealthChecks(app_id?: string) {
+  const sb = getSupabase();
+  if (sb) {
+    let query = sb.from('health_checks').select('*').order('checked_at', { ascending: false });
+    if (app_id) query = query.eq('app_id', app_id);
+    const { data, error } = await query;
+    if (!error && data) return data;
+  }
+
+  const all = Array.from(mockDb.health_checks.values());
+  if (app_id) {
+    return all.filter((h) => h.app_id === app_id);
+  }
+  return all;
+}
+
+export async function saveEvalResult(data: {
+  model: string;
+  total_tasks: number;
+  passed_tasks: number;
+  failed_tasks: number;
+  pass_rate: number;
+  avg_latency_ms: number;
+  task_results: any[];
+}) {
+  const sb = getSupabase();
+  const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `eval-${Date.now()}`;
+  const record = {
+    id,
+    ...data,
+    created_at: new Date().toISOString(),
+  };
+
+  if (sb) {
+    const { data: inserted, error } = await sb.from('eval_results').insert([record]).select().single();
+    if (!error && inserted) return inserted;
+  }
+
+  mockDb.eval_results.set(data.model, record);
+  return record;
+}
+
+export async function getEvalResults(model?: string) {
+  const sb = getSupabase();
+  if (sb) {
+    let query = sb.from('eval_results').select('*').order('created_at', { ascending: false });
+    if (model) query = query.eq('model', model);
+    const { data, error } = await query;
+    if (!error && data) return data;
+  }
+
+  const all = Array.from(mockDb.eval_results.values());
+  if (model) {
+    return all.filter((e) => e.model === model);
+  }
+  return all;
 }
 
 

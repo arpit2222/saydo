@@ -2692,7 +2692,7 @@ const xe = H(["GET", "POST", "PUT", "PATCH", "DELETE"]), Le = H(["confirm", "blo
   verify_with: m().nullable().optional(),
   source_recording: m().uuid().nullable().optional(),
   narration: m().nullable().optional(),
-  status: H(["active", "drifted", "disabled"]).default("active")
+  status: H(["active", "drifted", "disabled", "at_risk"]).default("active")
 });
 T({
   method: xe,

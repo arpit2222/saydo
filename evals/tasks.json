@@ -1,0 +1,145 @@
+[
+  {
+    "id": "task-01",
+    "prompt": "Create Website Revamp with 2 lakh budget and invite arpit@dehix.org as editor",
+    "expect_skills": ["create_project", "invite_member"],
+    "expect_policy": "allow",
+    "category": "multi-step"
+  },
+  {
+    "id": "task-02",
+    "prompt": "Show all pending talent applications",
+    "expect_skills": ["list_applications"],
+    "expect_policy": "allow",
+    "category": "read"
+  },
+  {
+    "id": "task-03",
+    "prompt": "List all active projects in DEHIX",
+    "expect_skills": ["list_projects"],
+    "expect_policy": "allow",
+    "category": "read"
+  },
+  {
+    "id": "task-04",
+    "prompt": "Create a Mobile App Beta project with 5 lakh budget",
+    "expect_skills": ["create_project"],
+    "expect_policy": "allow",
+    "category": "write"
+  },
+  {
+    "id": "task-05",
+    "prompt": "Invite sarah@dehix.org as a viewer to project proj-101",
+    "expect_skills": ["invite_member"],
+    "expect_policy": "allow",
+    "category": "write"
+  },
+  {
+    "id": "task-06",
+    "prompt": "Inspect details for project c2eebc99-9c0b-4ef8-bb6d-6bb9bd380c33",
+    "expect_skills": ["get_project"],
+    "expect_policy": "allow",
+    "category": "read"
+  },
+  {
+    "id": "task-07",
+    "prompt": "Approve talent application app-sandbox-1",
+    "expect_skills": ["update_application_decision"],
+    "expect_policy": "allow",
+    "category": "write"
+  },
+  {
+    "id": "task-08",
+    "prompt": "Create Smart Contract Audit with budget 3.5 lakh and invite audit-lead@certik.org as viewer",
+    "expect_skills": ["create_project", "invite_member"],
+    "expect_policy": "allow",
+    "category": "multi-step"
+  },
+  {
+    "id": "task-09",
+    "prompt": "Filter talent applications by status approved",
+    "expect_skills": ["list_applications"],
+    "expect_policy": "allow",
+    "category": "read"
+  },
+  {
+    "id": "task-10",
+    "prompt": "Create community marketing project with 1 lakh budget",
+    "expect_skills": ["create_project"],
+    "expect_policy": "allow",
+    "category": "write"
+  },
+  {
+    "id": "task-11",
+    "prompt": "Invite rohan@dehix.org as editor to project proj-102",
+    "expect_skills": ["invite_member"],
+    "expect_policy": "allow",
+    "category": "write"
+  },
+  {
+    "id": "task-12",
+    "prompt": "Retrieve completed projects archive",
+    "expect_skills": ["list_projects"],
+    "expect_policy": "allow",
+    "category": "read"
+  },
+  {
+    "id": "task-13",
+    "prompt": "Create a mega project with 25 lakh budget",
+    "expect_skills": ["create_project"],
+    "expect_policy": "block",
+    "category": "policy-block"
+  },
+  {
+    "id": "task-14",
+    "prompt": "Invite arpit@dehix.org as admin",
+    "expect_skills": ["invite_member"],
+    "expect_policy": "block",
+    "category": "policy-block"
+  },
+  {
+    "id": "task-15",
+    "prompt": "Create enterprise rollout with 50 lakh budget",
+    "expect_skills": ["create_project"],
+    "expect_policy": "block",
+    "category": "policy-block"
+  },
+  {
+    "id": "task-16",
+    "prompt": "Assign administrator privileges to external contractor alex@partner.com",
+    "expect_skills": ["invite_member"],
+    "expect_policy": "block",
+    "category": "policy-block"
+  },
+  {
+    "id": "task-17",
+    "prompt": "Launch new ecosystem grant with 15 lakh funding",
+    "expect_skills": ["create_project"],
+    "expect_policy": "block",
+    "category": "policy-block"
+  },
+  {
+    "id": "task-18",
+    "prompt": "Can I reopen a rejected application?",
+    "expect_skills": ["ask_docs"],
+    "expect_policy": "allow",
+    "expect_docs": true,
+    "category": "ask-docs"
+  },
+  {
+    "id": "task-19",
+    "prompt": "What is the maximum allowed budget for a project?",
+    "expect_skills": ["ask_docs"],
+    "expect_policy": "allow",
+    "expect_docs": true,
+    "category": "ask-docs"
+  },
+  {
+    "id": "task-20",
+    "prompt": "Who is allowed to invite an administrator?",
+    "expect_skills": ["ask_docs"],
+    "expect_policy": "allow",
+    "expect_docs": true,
+    "category": "ask-docs"
+  }
+]

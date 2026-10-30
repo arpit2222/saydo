@@ -8,9 +8,11 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'linting @saydo/api'",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:evals": "tsx scripts/run-evals.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@saydo/shared": "workspace:*",
     "@supabase/supabase-js": "^2.49.1",
     "@tavily/core": "^0.7.14",

@@ -14,6 +14,7 @@ import { chatRouter } from './routes/chat.js';
 import { discoverRouter } from './routes/discover.js';
 import { driftRouter } from './routes/drift.js';
 import { mcpRouter } from './routes/mcp.js';
+import { evalsRouter } from './routes/evals.js';
 import { getAppByPublicKey } from './lib/supabase.js';
 
 const app: Express = express();
@@ -95,6 +96,9 @@ app.use('/v1/drift', driftRouter);
 
 // Model Context Protocol (MCP) Streamable HTTP Server
 app.use('/mcp', mcpRouter);
+
+// Evals & Benchmarks
+app.use('/v1/evals', evalsRouter);
 
 // Base route
 app.get('/', (_req: Request, res: Response) => {

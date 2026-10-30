@@ -19,7 +19,8 @@ import {
   ShieldAlert,
   PlusCircle,
   RefreshCw,
-  Plug
+  Plug,
+  BarChart3
 } from 'lucide-react';
 
 interface SkillSuggestion {
@@ -198,10 +199,17 @@ export default function DiscoverPage() {
         </Link>
         <Link
           href="/studio/integrations"
-          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
         >
           <Plug className="w-4 h-4" />
           Integrations (MCP / WebMCP)
+        </Link>
+        <Link
+          href="/studio/evals"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
+        >
+          <BarChart3 className="w-4 h-4" />
+          Model Evals & Benchmark
         </Link>
       </div>
 

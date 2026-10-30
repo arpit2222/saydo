@@ -4,8 +4,8 @@ import { dehixStore } from '@/lib/dehix-store';
 
 const DecisionSchema = z.object({
   application_id: z.string().min(1, 'application_id is required'),
-  decision: z.enum(['accepted', 'rejected'], {
-    errorMap: () => ({ message: 'Decision must be accepted or rejected' }),
+  decision: z.enum(['accepted', 'approved', 'rejected'], {
+    errorMap: () => ({ message: 'Decision must be accepted, approved, or rejected' }),
   }),
 });
 
@@ -22,8 +22,9 @@ export async function POST(req: NextRequest) {
     }
 
     const { application_id, decision } = parsed.data;
+    const normalizedDecision = decision === 'approved' ? 'accepted' : decision;
 
-    const result = await dehixStore.updateApplicationDecision(application_id, decision);
+    const result = await dehixStore.updateApplicationDecision(application_id, normalizedDecision);
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });

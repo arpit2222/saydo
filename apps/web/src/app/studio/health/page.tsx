@@ -17,14 +17,37 @@ import {
   ShieldCheck,
   Zap,
   ArrowRight,
-  Plug
+  Plug,
+  BarChart3,
+  Terminal,
+  Clock,
+  ChevronRight
 } from 'lucide-react';
 import { SkillDefinition } from '@saydo/shared';
+
+interface HealthCheck {
+  id: string;
+  app_id: string;
+  skill_id?: string;
+  skill_name: string;
+  method: string;
+  path: string;
+  status: 'pass' | 'diff' | 'fail';
+  http_status?: number;
+  latency_ms: number;
+  diff_summary?: string;
+  expected_shape?: any;
+  actual_shape?: any;
+  checked_at: string;
+}
 
 export default function HealthPage() {
   const [skills, setSkills] = useState<SkillDefinition[]>([]);
   const [loading, setLoading] = useState(false);
+  const [probing, setProbing] = useState(false);
   const [driftResult, setDriftResult] = useState<any>(null);
+  const [healthChecks, setHealthChecks] = useState<HealthCheck[]>([]);
+  const [selectedCheck, setSelectedCheck] = useState<HealthCheck | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -38,6 +61,44 @@ export default function HealthPage() {
       }
     } catch (err) {
       console.error('Failed to load skills:', err);
+    }
+  };
+
+  const fetchHealthChecks = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/v1/health/checks`);
+      if (res.ok) {
+        const data = await res.json();
+        setHealthChecks(data.checks || []);
+      }
+    } catch (err) {
+      console.error('Failed to load health checks:', err);
+    }
+  };
+
+  const runHealthProbes = async () => {
+    setProbing(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiUrl}/v1/health/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ app_id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22' }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Health probe failed');
+      }
+
+      const data = await res.json();
+      setHealthChecks(data.checks || []);
+      await fetchSkills();
+    } catch (err: any) {
+      console.error('Health probe error:', err);
+      setError(err.message);
+    } finally {
+      setProbing(false);
     }
   };
 
@@ -70,10 +131,12 @@ export default function HealthPage() {
   useEffect(() => {
     fetchSkills();
     runDriftWatch();
+    runHealthProbes();
   }, []);
 
   const atRiskCount = skills.filter((s) => s.status === 'at_risk' || (driftResult?.drifted_skills?.some((ds: any) => ds.id === s.id))).length;
   const healthyCount = skills.length - atRiskCount;
+  const probePassCount = healthChecks.filter((c) => c.status === 'pass').length;
 
   return (
     <div className="min-h-screen bg-[#070b13] text-slate-100 font-sans flex flex-col">
@@ -127,41 +190,48 @@ export default function HealthPage() {
       </header>
 
       {/* Tabs Navigation */}
-      <div className="border-b border-slate-800 bg-[#090d16] px-8 flex items-center gap-2">
+      <div className="border-b border-slate-800 bg-[#090d16] px-8 flex items-center gap-2 overflow-x-auto">
         <Link
           href="/studio"
-          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
         >
           <Layers className="w-4 h-4" />
           Skills Library
         </Link>
         <Link
           href="/studio/policies"
-          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
         >
           <ShieldAlert className="w-4 h-4" />
           Spoken Policies & Guardrails
         </Link>
         <Link
           href="/studio/discover"
-          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
         >
           <Compass className="w-4 h-4" />
           Discover with Tavily
         </Link>
         <Link
           href="/studio/health"
-          className="px-4 py-3 text-xs font-semibold text-emerald-400 border-b-2 border-emerald-500 flex items-center gap-2"
+          className="px-4 py-3 text-xs font-semibold text-emerald-400 border-b-2 border-emerald-500 flex items-center gap-2 whitespace-nowrap"
         >
           <Activity className="w-4 h-4 text-emerald-400" />
           Contract Health & Drift
         </Link>
         <Link
           href="/studio/integrations"
-          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
         >
           <Plug className="w-4 h-4" />
           Integrations (MCP / WebMCP)
+        </Link>
+        <Link
+          href="/studio/evals"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
+        >
+          <BarChart3 className="w-4 h-4" />
+          Model Evals & Benchmark
         </Link>
       </div>
 
@@ -172,62 +242,192 @@ export default function HealthPage() {
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
                 <Activity className="w-3 h-3" />
-                Tavily Drift Watch
+                Continuous Health Probe & Drift Watch
               </span>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                 Nemotron Contract Analyzer
               </span>
             </div>
-            <h1 className="text-xl font-bold text-white">Continuous API Contract & Drift Watch</h1>
+            <h1 className="text-xl font-bold text-white">Active Contract Probes & Tavily Drift Watch</h1>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Tavily monitors your product changelog and release notes. Nemotron maps announced deprecations, endpoint updates, or field renames directly to recorded agent skills to prevent runtime execution failures before they happen.
+              Live probes verify your HTTP endpoints against recorded JSON schemas. Tavily scans product changelogs to flag schema changes or deprecations before production breakage.
             </p>
           </div>
 
-          <div className="flex items-center gap-4 w-full md:w-auto justify-end">
+          <div className="flex items-center gap-3 w-full md:w-auto justify-end">
             {/* Health Score Box */}
-            <div className="flex items-center gap-6 p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+            <div className="flex items-center gap-5 p-3.5 rounded-xl bg-slate-900/80 border border-slate-800">
               <div className="flex flex-col">
-                <span className="text-[11px] text-slate-400">Skills Monitored</span>
-                <span className="text-2xl font-black text-white">{skills.length}</span>
+                <span className="text-[10px] text-slate-400">Skills</span>
+                <span className="text-xl font-black text-white">{skills.length}</span>
               </div>
-              <div className="h-8 w-px bg-slate-800" />
+              <div className="h-7 w-px bg-slate-800" />
               <div className="flex flex-col">
-                <span className="text-[11px] text-emerald-400">Healthy</span>
-                <span className="text-2xl font-black text-emerald-400">{healthyCount}</span>
+                <span className="text-[10px] text-emerald-400">Probes Passed</span>
+                <span className="text-xl font-black text-emerald-400">{probePassCount}/{healthChecks.length || skills.length}</span>
               </div>
-              <div className="h-8 w-px bg-slate-800" />
+              <div className="h-7 w-px bg-slate-800" />
               <div className="flex flex-col">
-                <span className="text-[11px] text-amber-400">At Risk</span>
-                <span className="text-2xl font-black text-amber-400">{atRiskCount}</span>
+                <span className="text-[10px] text-amber-400">At Risk</span>
+                <span className="text-xl font-black text-amber-400">{atRiskCount}</span>
               </div>
             </div>
 
-            <button
-              onClick={runDriftWatch}
-              disabled={loading}
-              className="px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-600 hover:from-emerald-400 hover:to-cyan-500 text-black font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>{loading ? 'Scanning Changelog...' : 'Run Drift Watch'}</span>
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={runHealthProbes}
+                disabled={probing}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-600 hover:from-emerald-400 hover:to-cyan-500 text-black font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all justify-center"
+              >
+                <Zap className={`w-3.5 h-3.5 ${probing ? 'animate-spin' : ''}`} />
+                <span>{probing ? 'Probing...' : 'Run Active Probes'}</span>
+              </button>
+
+              <button
+                onClick={runDriftWatch}
+                disabled={loading}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs flex items-center gap-2 border border-slate-700 disabled:opacity-50 transition-all justify-center"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                <span>{loading ? 'Scanning Changelog...' : 'Tavily Drift Scan'}</span>
+              </button>
+            </div>
           </div>
         </section>
 
         {error && (
           <div className="p-4 rounded-xl bg-red-950/30 border border-red-500/30 text-red-300 text-xs flex items-center gap-3">
             <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-            <span>Drift Watch Error: {error}</span>
+            <span>Health Watch Error: {error}</span>
           </div>
         )}
 
-        {/* Section: At-Risk Alerts */}
+        {/* Section: Live Health Probes Table */}
+        <section className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-emerald-400" />
+              <h2 className="text-sm font-bold text-white tracking-wide">
+                ACTIVE CONTRACT PROBES ({healthChecks.length})
+              </h2>
+            </div>
+            <span className="text-xs text-slate-400">
+              Live HTTP probes comparing actual JSON responses against recorded contracts
+            </span>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#0c101a]">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#090d16] text-slate-400 border-b border-slate-800">
+                <tr>
+                  <th className="py-3 px-4 font-semibold">Skill Target</th>
+                  <th className="py-3 px-4 font-semibold">Endpoint</th>
+                  <th className="py-3 px-4 font-semibold">HTTP Status</th>
+                  <th className="py-3 px-4 font-semibold">Latency</th>
+                  <th className="py-3 px-4 font-semibold">Shape Integrity</th>
+                  <th className="py-3 px-4 font-semibold text-right">Probe Verdict</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {healthChecks.map((check) => (
+                  <tr
+                    key={check.id}
+                    onClick={() => setSelectedCheck(selectedCheck?.id === check.id ? null : check)}
+                    className="hover:bg-slate-900/40 transition-colors cursor-pointer"
+                  >
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-slate-200">{check.skill_name}</div>
+                      <div className="text-[11px] text-slate-500 font-mono">probe #{check.id.slice(0, 8)}</div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
+                          check.method === 'POST'
+                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                        }`}
+                      >
+                        {check.method}
+                      </span>
+                      <span className="ml-2 text-slate-300 font-mono text-[11px]">{check.path}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[11px]">
+                        {check.http_status || 200} OK
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
+                      {check.latency_ms}ms
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="text-slate-300 text-[11px]">
+                        {check.diff_summary || 'Matches recorded JSON schema'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      {check.status === 'pass' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          <CheckCircle2 className="w-3 h-3" />
+                          PASS
+                        </span>
+                      ) : check.status === 'diff' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                          <AlertTriangle className="w-3 h-3" />
+                          DIFF
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-500/15 text-red-400 border border-red-500/30">
+                          <AlertTriangle className="w-3 h-3" />
+                          FAIL
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Expanded Selected Check Schema Diff View */}
+          {selectedCheck && (
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-white">
+                  Probe Inspector: {selectedCheck.skill_name} ({selectedCheck.method} {selectedCheck.path})
+                </span>
+                <button
+                  onClick={() => setSelectedCheck(null)}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-slate-400">Expected Contract Fields:</span>
+                  <pre className="p-3 rounded-lg bg-black/60 border border-slate-800 text-[11px] text-emerald-300 font-mono overflow-x-auto">
+                    {JSON.stringify(selectedCheck.expected_shape || { status: 'success' }, null, 2)}
+                  </pre>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-slate-400">Actual Probe Response:</span>
+                  <pre className="p-3 rounded-lg bg-black/60 border border-slate-800 text-[11px] text-cyan-300 font-mono overflow-x-auto">
+                    {JSON.stringify(selectedCheck.actual_shape || { ok: true }, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Section: At-Risk Drift Alerts */}
         {driftResult?.drifted_skills && driftResult.drifted_skills.length > 0 && (
           <section className="flex flex-col gap-4">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400" />
               <h2 className="text-sm font-bold text-white tracking-wide">
-                CONTRACT DRIFT ALERTS ({driftResult.drifted_skills.length})
+                CHANGELOG CONTRACT DRIFT ALERTS ({driftResult.drifted_skills.length})
               </h2>
             </div>
 

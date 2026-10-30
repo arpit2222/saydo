@@ -97,6 +97,20 @@ export function generateDynamicTools(skills: SkillDefinition[]): any[] {
   return tools;
 }
 
+// Convert INR currencies (e.g., '2.5 lakh') to numeric values
+export function parseCurrenciesToNumbers(val: any): number {
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const matchLakh = val.match(/(\d+(?:\.\d+)?)\s*lakh/i);
+    if (matchLakh) {
+      return Math.round(parseFloat(matchLakh[1]) * 100000);
+    }
+    const num = Number(val.replace(/[^0-9.-]+/g, ''));
+    if (!isNaN(num)) return num;
+  }
+  return 0;
+}
+
 // Validate skill arguments dynamically
 export function validateSkillArgs(skill: SkillDefinition, args: Record<string, any>): { valid: boolean; error?: string; parsedArgs: Record<string, any> } {
   const parsedArgs = { ...args };
@@ -158,7 +172,9 @@ export async function planMultiIntent(
   }
 
   // Also check typical multi-intent patterns (e.g. "create project ... and invite ...")
-  if (lower.includes('project') && (lower.includes('invite') || lower.includes('member'))) {
+  const hasCreate = lower.includes('create') || lower.includes('launch') || lower.includes('new project') || lower.includes('revamp');
+  const hasInvite = lower.includes('invite') || lower.includes('member');
+  if (hasCreate && hasInvite) {
     matchCount = Math.max(matchCount, 2);
   }
 
@@ -217,7 +233,8 @@ Return valid JSON only. Do not invent skills.`,
 
   // Deterministic neuro-symbolic fallback planner
   const plannedSteps: any[] = [];
-  if (lower.includes('create') || lower.includes('project') || lower.includes('revamp') || lower.includes('budget')) {
+  const createsProject = lower.includes('create') || lower.includes('launch') || lower.includes('new project') || lower.includes('revamp');
+  if (createsProject && (lower.includes('project') || lower.includes('revamp') || lower.includes('budget') || lower.includes('grant') || lower.includes('rollout'))) {
     const budgetMatch = lower.match(/(\d+(?:\.\d+)?)\s*lakh/i);
     const budget = budgetMatch ? Math.round(parseFloat(budgetMatch[1]) * 100000) : 200000;
     plannedSteps.push({
