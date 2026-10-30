@@ -241,6 +241,89 @@ class DehixStore {
 
     return { success: true, application: app };
   }
+
+  public async reseed(): Promise<boolean> {
+    this.projects = [
+      {
+        id: 'c2eebc99-9c0b-4ef8-bb6d-6bb9bd380c33',
+        name: 'Website Revamp',
+        description: 'Redesign marketing landing and customer onboarding flow.',
+        budget: 200000,
+        status: 'active',
+        created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+      },
+      {
+        id: 'd3eebc99-9c0b-4ef8-bb6d-6bb9bd380d44',
+        name: 'Mobile App Beta',
+        description: 'Build iOS and Android MVP using React Native.',
+        budget: 500000,
+        status: 'active',
+        created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
+      },
+      {
+        id: 'f4eebc99-9c0b-4ef8-bb6d-6bb9bd380f55',
+        name: 'Smart Contract Audit',
+        description: 'Third-party formal verification for staking and vault contracts.',
+        budget: 350000,
+        status: 'completed',
+        created_at: new Date(Date.now() - 86400000 * 14).toISOString(),
+      },
+    ];
+
+    this.members = [
+      {
+        id: 'e4eebc99-9c0b-4ef8-bb6d-6bb9bd380e55',
+        project_id: 'c2eebc99-9c0b-4ef8-bb6d-6bb9bd380c33',
+        name: 'Ash',
+        email: 'ash@dehix.org',
+        role: 'admin',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'f5eebc99-9c0b-4ef8-bb6d-6bb9bd380f66',
+        project_id: 'c2eebc99-9c0b-4ef8-bb6d-6bb9bd380c33',
+        name: 'Sarah Connor',
+        email: 'sarah@dehix.org',
+        role: 'editor',
+        created_at: new Date().toISOString(),
+      },
+    ];
+
+    this.applications = [
+      {
+        id: 'app-001',
+        project_id: 'c2eebc99-9c0b-4ef8-bb6d-6bb9bd380c33',
+        project_name: 'Website Revamp',
+        applicant_name: 'Karan Mehra',
+        applicant_email: 'karan@designer.io',
+        pitch: '8+ years designing Web3 user interfaces, previously lead UI designer at Polygon.',
+        status: 'submitted',
+        created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
+      },
+      {
+        id: 'app-002',
+        project_id: 'd3eebc99-9c0b-4ef8-bb6d-6bb9bd380d44',
+        project_name: 'Mobile App Beta',
+        applicant_name: 'Priya Sharma',
+        applicant_email: 'priya@reactnative.dev',
+        pitch: 'Full-stack React Native engineer with 5 production apps in App Store.',
+        status: 'submitted',
+        created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+      },
+      {
+        id: 'app-003',
+        project_id: 'c2eebc99-9c0b-4ef8-bb6d-6bb9bd380c33',
+        project_name: 'Website Revamp',
+        applicant_name: 'Alex Rivera',
+        applicant_email: 'alex@cryptoagency.xyz',
+        pitch: 'Frontend studio team ready to deliver landing animations with Tailwind & Framer Motion.',
+        status: 'accepted',
+        created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+      },
+    ];
+
+    return true;
+  }
 }
 
 export const dehixStore = new DehixStore();

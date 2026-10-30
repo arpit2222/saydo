@@ -22,7 +22,9 @@ import {
   Compass,
   Activity,
   Plug,
-  BarChart3
+  BarChart3,
+  RotateCcw,
+  Terminal
 } from 'lucide-react';
 import { SkillDefinition, TracerEdge } from '@saydo/shared';
 
@@ -165,6 +167,22 @@ export default function StudioPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              try {
+                await fetch('/api/demo/reset', { method: 'POST' });
+                alert('Demo data successfully reseeded. Skills and policies preserved.');
+              } catch (e) {
+                // ignore
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-colors border border-slate-700"
+            title="Reseed mock data while preserving skills & policies"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+            <span>Reset Demo</span>
+          </button>
+
           <Link
             href="/projects"
             target="_blank"
@@ -185,31 +203,31 @@ export default function StudioPage() {
       </header>
 
       {/* Tabs Navigation */}
-      <div className="border-b border-slate-800 bg-[#090d16] px-8 flex items-center gap-2">
+      <div className="border-b border-slate-800 bg-[#090d16] px-8 flex items-center gap-2 overflow-x-auto">
         <Link
           href="/studio"
-          className="px-4 py-3 text-xs font-semibold text-blue-400 border-b-2 border-blue-500 flex items-center gap-2"
+          className="px-4 py-3 text-xs font-semibold text-blue-400 border-b-2 border-blue-500 flex items-center gap-2 whitespace-nowrap"
         >
           <Layers className="w-4 h-4 text-blue-400" />
           Skills Library
         </Link>
         <Link
           href="/studio/policies"
-          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
         >
           <ShieldAlert className="w-4 h-4" />
           Spoken Policies & Guardrails
         </Link>
         <Link
           href="/studio/discover"
-          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
         >
           <Compass className="w-4 h-4" />
           Discover with Tavily
         </Link>
         <Link
           href="/studio/health"
-          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
         >
           <Activity className="w-4 h-4" />
           Contract Health & Drift
@@ -227,6 +245,13 @@ export default function StudioPage() {
         >
           <BarChart3 className="w-4 h-4" />
           Model Evals & Benchmark
+        </Link>
+        <Link
+          href="/studio/runs"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
+        >
+          <Terminal className="w-4 h-4" />
+          Agent Runs & Telemetry
         </Link>
       </div>
 

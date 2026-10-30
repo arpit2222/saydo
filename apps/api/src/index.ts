@@ -15,6 +15,7 @@ import { discoverRouter } from './routes/discover.js';
 import { driftRouter } from './routes/drift.js';
 import { mcpRouter } from './routes/mcp.js';
 import { evalsRouter } from './routes/evals.js';
+import { runsRouter, statsRouter, demoRouter } from './routes/runs.js';
 import { getAppByPublicKey } from './lib/supabase.js';
 
 const app: Express = express();
@@ -99,6 +100,15 @@ app.use('/mcp', mcpRouter);
 
 // Evals & Benchmarks
 app.use('/v1/evals', evalsRouter);
+
+// Telemetry & Runs
+app.use('/v1/runs', runsRouter);
+
+// Live Stats
+app.use('/v1/stats', statsRouter);
+
+// Demo Reset
+app.use('/v1/demo', demoRouter);
 
 // Base route
 app.get('/', (_req: Request, res: Response) => {

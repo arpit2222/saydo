@@ -611,6 +611,64 @@ export async function getEvalResults(model?: string) {
   return all;
 }
 
+export async function getRuns(app_id?: string) {
+  const sb = getSupabase();
+  if (sb) {
+    let query = sb.from('runs').select('*').order('created_at', { ascending: false });
+    if (app_id) query = query.eq('app_id', app_id);
+    const { data, error } = await query;
+    if (!error && data) return data;
+  }
+
+  const all = Array.from(mockDb.runs.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  if (app_id) {
+    return all.filter((r) => r.app_id === app_id);
+  }
+  return all;
+}
+
+export async function getRunById(id: string) {
+  const sb = getSupabase();
+  if (sb) {
+    const { data: run, error } = await sb.from('runs').select('*').eq('id', id).single();
+    if (!error && run) {
+      const steps = await getRunSteps(id);
+      return { run, steps };
+    }
+  }
+
+  const run = mockDb.runs.get(id);
+  if (!run) return null;
+  const steps = await getRunSteps(id);
+  return { run, steps };
+}
+
+export async function getStats(app_id?: string) {
+  const allSkills = await getSkills(app_id);
+  const activeSkills = allSkills.filter((s: any) => s.status !== 'disabled');
+  const policies = await getPolicies(app_id);
+  const runs = await getRuns(app_id);
+  const evals = await getEvalResults();
+  const latestEval = evals[0];
+
+  return {
+    skills_count: activeSkills.length,
+    policies_count: policies.length,
+    runs_count: runs.length,
+    eval_pass_rate: latestEval ? latestEval.pass_rate : 100,
+    models_supported: 3,
+  };
+}
+
+export async function resetDemoData() {
+  mockDb.runs.clear();
+  mockDb.run_steps.clear();
+  mockDb.health_checks.clear();
+  return { success: true, message: 'Demo agent runs and health probes reset. Skills and safety policies preserved.' };
+}
+
 
 
 

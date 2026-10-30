@@ -59,6 +59,7 @@ class SayDoSDK {
   private isAgentBusy: boolean = false;
   private activePlan: { steps: PlanStepItem[]; summary: string } | null = null;
   private currentRunId: string | null = null;
+  private stats: { skillsCount: number; rulesCount: number } = { skillsCount: 6, rulesCount: 3 };
 
   constructor() {
     this.autoInit();
@@ -79,6 +80,7 @@ class SayDoSDK {
     this.setupInterceptors();
     this.initSpeechRecognition();
     this.mountWidget();
+    this.fetchAppStats();
 
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('saydo') === 'teach' || localStorage.getItem('saydo_mode') === 'teach') {
@@ -88,6 +90,22 @@ class SayDoSDK {
 
     this.render();
     console.log('[SayDo SDK] Initialized with app:', this.config.publicKey, 'API:', this.config.apiUrl);
+  }
+
+  private async fetchAppStats() {
+    try {
+      const res = await window.fetch(`${this.config.apiUrl}/v1/stats?publicKey=${this.config.publicKey}`);
+      if (res.ok) {
+        const data = await res.json();
+        this.stats = {
+          skillsCount: data.skills_count ?? 6,
+          rulesCount: data.policies_count ?? 3,
+        };
+        this.render();
+      }
+    } catch {
+      // fallback
+    }
   }
 
   private isTeachModeAllowed(): boolean {
@@ -531,21 +549,44 @@ class SayDoSDK {
           bottom: 76px;
           right: 24px;
           width: 420px;
-          max-height: 600px;
-          height: 560px;
+          max-height: calc(100vh - 100px);
+          height: 580px;
           background: #0b0f19;
           border: 1px solid #1e293b;
           border-radius: 20px;
           box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
           z-index: 2147483647;
-          display: ${this.isOpen ? 'flex' : 'none'};
+          display: flex;
           flex-direction: column;
           overflow: hidden;
-          animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+          transform-origin: bottom right;
+          opacity: ${this.isOpen ? '1' : '0'};
+          transform: ${this.isOpen ? 'translateY(0) scale(1)' : 'translateY(16px) scale(0.95)'};
+          pointer-events: ${this.isOpen ? 'auto' : 'none'};
         }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
+
+        /* Accessible Focus States */
+        button:focus-visible, input:focus-visible, textarea:focus-visible {
+          outline: 2px solid #10b981 !important;
+          outline-offset: 2px !important;
+        }
+
+        /* Mobile Layout */
+        @media (max-width: 640px) {
+          .saydo-panel {
+            bottom: 0 !important;
+            right: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 88vh !important;
+            max-height: 88vh !important;
+            border-radius: 20px 20px 0 0 !important;
+          }
+          .saydo-launcher {
+            bottom: 16px !important;
+            right: 16px !important;
+          }
         }
 
         /* Header */
@@ -692,6 +733,46 @@ class SayDoSDK {
           display: flex;
           flex-direction: column;
           gap: 6px;
+        }
+
+        /* Typing Indicator */
+        .saydo-typing-indicator {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 8px 12px;
+          background: #131b2e;
+          border: 1px solid #1e293b;
+          border-radius: 12px;
+          width: fit-content;
+        }
+        .saydo-typing-dot {
+          width: 6px;
+          height: 6px;
+          background: #3b82f6;
+          border-radius: 50%;
+          animation: saydo-bounce 1.4s infinite ease-in-out both;
+        }
+        .saydo-typing-dot:nth-child(1) {
+          animation-delay: -0.32s;
+        }
+        .saydo-typing-dot:nth-child(2) {
+          animation-delay: -0.16s;
+        }
+        @keyframes saydo-bounce {
+          0%, 80%, 100% {
+            transform: scale(0);
+            opacity: 0.4;
+          }
+          40% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        .saydo-typing-text {
+          font-size: 11px;
+          color: #94a3b8;
+          margin-left: 6px;
         }
 
         /* Tool Cards */
@@ -918,9 +999,11 @@ class SayDoSDK {
         <div class="saydo-header">
           <div class="saydo-brand">
             <span>⚡ SayDo</span>
-            <span class="saydo-badge">AI Skills</span>
+            <span class="saydo-badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border-color: rgba(16, 185, 129, 0.3);">
+              Agent-ready: ${this.stats.skillsCount} skills · ${this.stats.rulesCount} rules
+            </span>
           </div>
-          <button class="saydo-close" id="saydo-close">&times;</button>
+          <button class="saydo-close" id="saydo-close" aria-label="Close SayDo panel">&times;</button>
         </div>
 
         ${
@@ -1174,9 +1257,11 @@ class SayDoSDK {
             ${
               this.isAgentBusy
                 ? `
-              <div class="saydo-msg-assistant" style="align-items: center; justify-content: center; padding: 8px;">
-                <span class="saydo-indicator"></span>
-                <span style="font-size: 11px; color: #94a3b8; margin-left: 6px;">SayDo is reasoning...</span>
+              <div class="saydo-typing-indicator">
+                <span class="saydo-typing-dot"></span>
+                <span class="saydo-typing-dot"></span>
+                <span class="saydo-typing-dot"></span>
+                <span class="saydo-typing-text">SayDo is reasoning...</span>
               </div>
             `
                 : ''

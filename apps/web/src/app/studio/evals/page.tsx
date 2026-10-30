@@ -15,6 +15,7 @@ import {
   Play,
   Plug,
   RefreshCw,
+  RotateCcw,
   ShieldAlert,
   ShieldCheck,
   Terminal,
@@ -188,6 +189,22 @@ export default function StudioEvalsPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              try {
+                await fetch('/api/demo/reset', { method: 'POST' });
+                alert('Demo data successfully reseeded. Skills and policies preserved.');
+              } catch (e) {
+                // ignore
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-colors border border-slate-700"
+            title="Reseed mock data while preserving skills & policies"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+            <span>Reset Demo</span>
+          </button>
+
           <Link
             href="/projects"
             target="_blank"
@@ -242,6 +259,13 @@ export default function StudioEvalsPage() {
         >
           <BarChart3 className="w-4 h-4 text-emerald-400" />
           Model Evals & Benchmark
+        </Link>
+        <Link
+          href="/studio/runs"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2 whitespace-nowrap"
+        >
+          <Terminal className="w-4 h-4" />
+          Agent Runs & Telemetry
         </Link>
       </div>
 
