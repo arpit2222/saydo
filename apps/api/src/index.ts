@@ -13,6 +13,7 @@ import { policiesRouter } from './routes/policies.js';
 import { chatRouter } from './routes/chat.js';
 import { discoverRouter } from './routes/discover.js';
 import { driftRouter } from './routes/drift.js';
+import { mcpRouter } from './routes/mcp.js';
 import { getAppByPublicKey } from './lib/supabase.js';
 
 const app: Express = express();
@@ -91,6 +92,9 @@ app.use('/v1/discover', discoverRouter);
 
 // Tavily Drift Watch
 app.use('/v1/drift', driftRouter);
+
+// Model Context Protocol (MCP) Streamable HTTP Server
+app.use('/mcp', mcpRouter);
 
 // Base route
 app.get('/', (_req: Request, res: Response) => {

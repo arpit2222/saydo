@@ -430,6 +430,7 @@ export async function saveRun(data: {
   model_agent: string;
   model_reason?: string;
   total_ms?: number;
+  channel?: 'web' | 'mcp' | 'sdk' | 'eval';
 }) {
   const sb = getSupabase();
   const id = data.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `run-${Date.now()}`);
@@ -442,6 +443,7 @@ export async function saveRun(data: {
     model_agent: data.model_agent,
     model_reason: data.model_reason || null,
     total_ms: data.total_ms || 0,
+    channel: data.channel || 'web',
     created_at: new Date().toISOString(),
   };
 

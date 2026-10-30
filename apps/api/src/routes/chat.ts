@@ -35,9 +35,9 @@ chatRouter.post('/', async (req: Request, res: Response) => {
     return res.status(404).json({ error: `App not found for key: ${app_key}` });
   }
 
-  // 2. Load active skills and policies
+  // 2. Load active skills and policies (exclude only explicitly disabled skills)
   const allSkills = await getSkills(app.id);
-  const activeSkills: SkillDefinition[] = allSkills.filter((s: any) => s.status === 'active');
+  const activeSkills: SkillDefinition[] = allSkills.filter((s: any) => s.status !== 'disabled');
   const allPolicies: PolicyRule[] = await getPolicies(app.id);
 
   const runId = incomingRunId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `run-${Date.now()}`);

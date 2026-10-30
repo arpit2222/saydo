@@ -18,7 +18,8 @@ import {
   Layers,
   ArrowRight,
   Compass,
-  Activity
+  Activity,
+  Plug
 } from 'lucide-react';
 import { PolicyRule } from '@saydo/shared';
 
@@ -207,6 +208,13 @@ export default function PoliciesPage() {
         >
           <Activity className="w-4 h-4" />
           Contract Health & Drift
+        </Link>
+        <Link
+          href="/studio/integrations"
+          className="px-4 py-3 text-xs font-semibold text-slate-400 hover:text-white border-b-2 border-transparent transition-all flex items-center gap-2"
+        >
+          <Plug className="w-4 h-4" />
+          Integrations (MCP / WebMCP)
         </Link>
       </div>
 
