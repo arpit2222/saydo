@@ -30,6 +30,7 @@ const defaultAllowedOrigins = [
   'http://127.0.0.1:3000',
   'http://localhost:4000',
   process.env.WEB_URL || 'http://localhost:3000',
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()) : []),
 ];
 
 const corsOptions: CorsOptions = {
@@ -38,6 +39,11 @@ const corsOptions: CorsOptions = {
     if (!origin) return callback(null, true);
 
     if (defaultAllowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Allow Vercel preview/production deployments & custom domains
+    if (origin.endsWith('.vercel.app') || origin.endsWith('.saydo.app')) {
       return callback(null, true);
     }
 
@@ -73,6 +79,13 @@ app.use(express.json({ limit: '2mb' }));
 
 // Health Routes
 app.use('/v1/health', healthRouter);
+app.get('/v1/healthz', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    service: 'saydo-api',
+    time: new Date().toISOString(),
+  });
+});
 
 // Recordings Routes
 app.use('/v1/recordings', recordingsRouter);

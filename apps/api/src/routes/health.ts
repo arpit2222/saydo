@@ -13,6 +13,14 @@ healthRouter.get('/', (_req: Request, res: Response) => {
   });
 });
 
+healthRouter.get('/healthz', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    service: 'saydo-api',
+    time: new Date().toISOString(),
+  });
+});
+
 healthRouter.get('/models', async (_req: Request, res: Response) => {
   const models = [
     { role: 'fast', name: NEBIUS_MODELS.fast },

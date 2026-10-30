@@ -17,8 +17,8 @@ export default function RootLayout({
         {children}
         <script
           src="/sdk.js"
-          data-app="pk_demo_dehix"
-          data-api="http://localhost:4000"
+          data-app={process.env.NEXT_PUBLIC_APP_KEY || "pk_demo_dehix"}
+          data-api={process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}
           defer
         ></script>
       </body>

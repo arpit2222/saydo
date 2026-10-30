@@ -49,4 +49,22 @@
   - Add a quick version migration badge or explicit deprecation note on 0.0.x versions on npm.
 
 ---
+
+### [2026-10-30] Nebius Serverless Endpoints Containerization & Liveness Probes
+* **Component**: Nebius Serverless Endpoints / Nebius Container Registry (`cr.nemax.nebius.cloud`)
+* **Context**: Multi-stage container packaging for `apps/api` with pnpm workspace dependencies.
+* **What happened**:
+  - *Dynamic Port Binding*: Serverless container runtimes dynamically inject the `$PORT` environment variable. Hardcoded ports or static Docker `EXPOSE 4000` lead to failed gateway routing unless runtime port binding is fully dynamic.
+  - *Cold-Start Initial Delays*: Containerized agent runtimes initializing LLM clients need a brief startup window before aggressive health checks begin. Sub-second probes without a grace period trigger false-positive container restarts.
+  - *Non-Root Execution*: Hardened production clusters enforce non-root security contexts (`UID != 0`), requiring ownership permissions during multi-stage image copying.
+* **Workaround implemented in SayDo**:
+  - Bound `PORT` dynamically via `process.env.PORT ? parseInt(process.env.PORT, 10) : 4000` in `apps/api/src/index.ts`.
+  - Dedicated zero-dependency `/v1/healthz` liveness probe returning HTTP 200 instantly without triggering external model latency.
+  - Built an inline healthcheck probe: `HEALTHCHECK --interval=15s --timeout=5s --start-period=5s CMD node -e "fetch('http://localhost:' + (process.env.PORT || 4000) + '/v1/healthz')..."`.
+  - Set production runner user to `USER node` with non-root ownership in `apps/api/Dockerfile`.
+* **Suggestion for Nebius**:
+  - Provide a standardized container template repository with recommended `--min-instances 1` guidance for latency-sensitive AI agent APIs, and native integration for Nebius Cloud Secret Manager in the `nebius serverless endpoint create` CLI.
+
+---
 *(Additional entries will be logged as real network requests run and tests proceed.)*
+
