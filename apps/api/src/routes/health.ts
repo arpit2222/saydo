@@ -160,6 +160,20 @@ healthRouter.post('/run', async (req: Request, res: Response) => {
       diff = { error: err.message };
     }
 
+    // For write skills: run against sandbox and clean up
+    if (skill.name === 'create_project' && resJson?.project_id) {
+      try {
+        await fetch(`${hostBaseUrl}/api/dehix/projects?id=${resJson.project_id}`, {
+          method: 'DELETE',
+          headers: {
+            'X-Agent-Token': process.env.AGENT_TOKEN || 'saydo_health_agent_token_secret',
+          },
+        });
+      } catch (e) {
+        // cleanup best-effort
+      }
+    }
+
     const latencyMs = Date.now() - startTime;
 
     const record = await saveHealthCheck({

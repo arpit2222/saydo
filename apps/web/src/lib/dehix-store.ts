@@ -160,6 +160,15 @@ class DehixStore {
     return newProject;
   }
 
+  public async deleteProject(id: string): Promise<boolean> {
+    const sb = this.getSupabase();
+    if (sb) {
+      await sb.from('projects').delete().eq('id', id);
+    }
+    this.projects = this.projects.filter((p) => p.id !== id);
+    return true;
+  }
+
   public async getMembers(): Promise<Member[]> {
     const sb = this.getSupabase();
     if (sb) {
