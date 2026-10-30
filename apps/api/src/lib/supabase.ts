@@ -1,0 +1,324 @@
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { logger } from './logger.js';
+
+let supabaseClient: SupabaseClient | null = null;
+
+export function getSupabase(): SupabaseClient | null {
+  if (supabaseClient) return supabaseClient;
+
+  const url = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceKey || url.includes('your-project') || serviceKey.includes('your_service_role')) {
+    logger.warn('Supabase URL or Service Role Key not set. Using local mock storage for dev.');
+    return null;
+  }
+
+  supabaseClient = createClient(url, serviceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+
+  return supabaseClient;
+}
+
+// In-memory mock store for local development before Supabase keys are provided
+export const mockDb = {
+  apps: new Map([
+    [
+      'pk_demo_dehix',
+      {
+        id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
+        org_id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        name: 'DEHIX-lite',
+        public_key: 'pk_demo_dehix',
+        allowed_origins: [
+          'http://localhost:3000',
+          'http://127.0.0.1:3000',
+          'https://saydo.app',
+          'https://saydo-demo.vercel.app',
+        ],
+        docs_url: 'https://saydo.app/docs',
+        changelog_url: 'https://saydo.app/changelog',
+      },
+    ],
+  ]),
+  recordings: new Map<string, any>(),
+  skills: new Map<string, any>([
+    [
+      '11111111-1111-1111-1111-111111111111',
+      {
+        id: '11111111-1111-1111-1111-111111111111',
+        app_id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
+        name: 'list_projects',
+        version: 1,
+        title: 'List Projects',
+        description: 'Retrieve all active and archived projects in DEHIX-lite',
+        method: 'GET',
+        path: '/api/dehix/projects',
+        query_params: ['status'],
+        inputs: {
+          status: { type: 'string', required: false, enum: ['active', 'completed', 'archived'] },
+        },
+        constants: {},
+        outputs: { projects: 'array' },
+        depends_on: [],
+        is_write: false,
+        verify_with: null,
+        status: 'active',
+        created_at: new Date().toISOString(),
+      },
+    ],
+    [
+      '22222222-2222-2222-2222-222222222222',
+      {
+        id: '22222222-2222-2222-2222-222222222222',
+        app_id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
+        name: 'create_project',
+        version: 1,
+        title: 'Create Project',
+        description: 'Create a new project with name, budget, and description',
+        method: 'POST',
+        path: '/api/dehix/projects',
+        query_params: [],
+        inputs: {
+          name: { type: 'string', required: true, description: 'Project title' },
+          budget: { type: 'number', required: true, description: 'Grant budget in INR' },
+          description: { type: 'string', required: false, description: 'Milestones and deliverables' },
+        },
+        constants: {},
+        outputs: { project_id: 'string', message: 'string' },
+        depends_on: [],
+        is_write: true,
+        verify_with: 'get_project',
+        status: 'active',
+        created_at: new Date().toISOString(),
+      },
+    ],
+    [
+      '33333333-3333-3333-3333-333333333333',
+      {
+        id: '33333333-3333-3333-3333-333333333333',
+        app_id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
+        name: 'get_project',
+        version: 1,
+        title: 'Get Project Details',
+        description: 'Retrieve a specific project by its ID',
+        method: 'GET',
+        path: '/api/dehix/projects/get',
+        query_params: ['id'],
+        inputs: {
+          id: { type: 'string', required: true, description: 'Project ID UUID' },
+        },
+        constants: {},
+        outputs: { project: 'object' },
+        depends_on: [],
+        is_write: false,
+        verify_with: null,
+        status: 'active',
+        created_at: new Date().toISOString(),
+      },
+    ],
+    [
+      '44444444-4444-4444-4444-444444444444',
+      {
+        id: '44444444-4444-4444-4444-444444444444',
+        app_id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
+        name: 'invite_member',
+        version: 1,
+        title: 'Invite Team Member',
+        description: 'Invite a user by email with a role',
+        method: 'POST',
+        path: '/api/dehix/members',
+        query_params: [],
+        inputs: {
+          project_id: { type: 'string', required: false, description: 'Associated project ID' },
+          email: { type: 'string', required: true, description: 'Collaborator email address' },
+          role: { type: 'string', required: true, enum: ['viewer', 'editor', 'admin'] },
+        },
+        constants: {},
+        outputs: { member_id: 'string', message: 'string' },
+        depends_on: ['create_project'],
+        is_write: true,
+        verify_with: null,
+        status: 'active',
+        created_at: new Date().toISOString(),
+      },
+    ],
+  ]),
+  policies: new Map<string, any>(),
+};
+
+export async function getAppByPublicKey(publicKey: string) {
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb
+      .from('apps')
+      .select('*')
+      .eq('public_key', publicKey)
+      .single();
+
+    if (error) {
+      logger.error({ error, publicKey }, 'Failed to fetch app by public key from Supabase');
+      return null;
+    }
+    return data;
+  }
+
+  return mockDb.apps.get(publicKey) || null;
+}
+
+export async function saveRecording(data: {
+  app_id: string;
+  title: string;
+  events: any[];
+  narration?: string;
+}) {
+  const sb = getSupabase();
+  const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `rec-${Date.now()}`;
+  const record = {
+    id,
+    app_id: data.app_id,
+    title: data.title,
+    events: data.events,
+    narration: data.narration || null,
+    created_at: new Date().toISOString(),
+  };
+
+  if (sb) {
+    const { data: inserted, error } = await sb.from('recordings').insert([record]).select().single();
+    if (error) {
+      logger.error({ error }, 'Failed to save recording in Supabase');
+      throw error;
+    }
+    return inserted;
+  }
+
+  mockDb.recordings.set(id, record);
+  return record;
+}
+
+export async function getRecordings(app_id?: string) {
+  const sb = getSupabase();
+  if (sb) {
+    let query = sb.from('recordings').select('*').order('created_at', { ascending: false });
+    if (app_id) query = query.eq('app_id', app_id);
+    const { data, error } = await query;
+    if (!error && data) return data;
+  }
+
+  const all = Array.from(mockDb.recordings.values());
+  if (app_id) {
+    return all.filter((r) => r.app_id === app_id);
+  }
+  return all;
+}
+
+export async function getRecordingById(id: string) {
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb.from('recordings').select('*').eq('id', id).single();
+    if (!error && data) return data;
+  }
+  return mockDb.recordings.get(id) || null;
+}
+
+export async function getSkills(app_id?: string) {
+  const sb = getSupabase();
+  if (sb) {
+    let query = sb.from('skills').select('*').order('created_at', { ascending: false });
+    if (app_id) query = query.eq('app_id', app_id);
+    const { data, error } = await query;
+    if (!error && data) return data;
+  }
+
+  const all = Array.from(mockDb.skills.values());
+  if (app_id) {
+    return all.filter((s) => s.app_id === app_id);
+  }
+  return all;
+}
+
+export async function saveSkill(skill: any) {
+  const sb = getSupabase();
+  const id = skill.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `skill-${Date.now()}`);
+  const record = {
+    ...skill,
+    id,
+    created_at: new Date().toISOString(),
+  };
+
+  if (sb) {
+    const { data, error } = await sb.from('skills').upsert([record], { onConflict: 'app_id,name,version' }).select().single();
+    if (error) {
+      logger.error({ error }, 'Failed to save skill in Supabase');
+      throw error;
+    }
+    return data;
+  }
+
+  mockDb.skills.set(id, record);
+  return record;
+}
+
+export async function updateSkillStatus(id: string, status: 'active' | 'drifted' | 'disabled') {
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb.from('skills').update({ status }).eq('id', id).select().single();
+    if (!error && data) return data;
+  }
+
+  const skill = mockDb.skills.get(id);
+  if (skill) {
+    skill.status = status;
+    return skill;
+  }
+  return null;
+}
+
+export async function savePolicies(policies: any[]) {
+  const sb = getSupabase();
+  if (policies.length === 0) return [];
+
+  if (sb) {
+    const { data, error } = await sb.from('policies').insert(policies).select();
+    if (!error && data) return data;
+  }
+
+  policies.forEach((p) => {
+    const id = p.id || `pol-${Date.now()}`;
+    mockDb.policies.set(id, { ...p, id });
+  });
+
+  return policies;
+}
+
+export async function getPolicies(app_id?: string) {
+  const sb = getSupabase();
+  if (sb) {
+    let query = sb.from('policies').select('*').order('created_at', { ascending: false });
+    if (app_id) query = query.eq('app_id', app_id);
+    const { data, error } = await query;
+    if (!error && data) return data;
+  }
+
+  const all = Array.from(mockDb.policies.values());
+  if (app_id) {
+    return all.filter((p) => p.app_id === app_id);
+  }
+  return all;
+}
+
+export async function deletePolicy(id: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (sb) {
+    const { error } = await sb.from('policies').delete().eq('id', id);
+    return !error;
+  }
+  return mockDb.policies.delete(id);
+}
+
+
+
