@@ -10,6 +10,7 @@ import { recordingsRouter } from './routes/recordings.js';
 import { compileRouter } from './routes/compile.js';
 import { skillsRouter } from './routes/skills.js';
 import { policiesRouter } from './routes/policies.js';
+import { chatRouter } from './routes/chat.js';
 import { getAppByPublicKey } from './lib/supabase.js';
 
 const app: Express = express();
@@ -79,6 +80,9 @@ app.use('/v1/skills', skillsRouter);
 
 // Spoken Policies Engine
 app.use('/v1/policies', policiesRouter);
+
+// Agent Chat & Execution
+app.use('/v1/chat', chatRouter);
 
 // Base route
 app.get('/', (_req: Request, res: Response) => {

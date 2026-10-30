@@ -6,6 +6,35 @@ export interface SayDoConfig {
   apiPrefix?: string;
 }
 
+export interface ChatItem {
+  id: string;
+  role: 'user' | 'assistant' | 'tool';
+  text?: string;
+  toolCall?: {
+    call_id: string;
+    skill: string;
+    method?: string;
+    path?: string;
+    args: Record<string, any>;
+    check: any;
+    blocked?: boolean;
+    needsConfirm?: boolean;
+    message?: string;
+    is_verification?: boolean;
+    original_write?: any;
+  };
+  verified?: boolean;
+  verificationNote?: string;
+  status?: 'pending' | 'running' | 'completed' | 'cancelled' | 'blocked';
+}
+
+export interface PlanStepItem {
+  idx: number;
+  skill_name: string;
+  description: string;
+  completed?: boolean;
+}
+
 class SayDoSDK {
   private config: SayDoConfig = {
     publicKey: 'pk_demo_dehix',
@@ -22,6 +51,13 @@ class SayDoSDK {
   private speechRecognition: any = null;
   private narrationText: string = '';
   private recordingTitle: string = '';
+
+  // Ask Agent State
+  private chatItems: ChatItem[] = [];
+  private chatInputText: string = '';
+  private isAgentBusy: boolean = false;
+  private activePlan: { steps: PlanStepItem[]; summary: string } | null = null;
+  private currentRunId: string | null = null;
 
   constructor() {
     this.autoInit();
@@ -43,7 +79,6 @@ class SayDoSDK {
     this.initSpeechRecognition();
     this.mountWidget();
 
-    // Check if URL has ?saydo=teach or localStorage flag
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('saydo') === 'teach' || localStorage.getItem('saydo_mode') === 'teach') {
       this.activeTab = 'teach';
@@ -83,9 +118,7 @@ class SayDoSDK {
             let responseBody: unknown = null;
             try {
               responseBody = await clone.json();
-            } catch {
-              // Not JSON
-            }
+            } catch {}
 
             const rawBody = args[1]?.body;
             const parsedBody = self.safeParseBody(rawBody);
@@ -149,8 +182,7 @@ class SayDoSDK {
 
   private addCapturedEvent(event: NetworkCapturedEvent) {
     this.recordedEvents.push(event);
-    console.log('[SayDo SDK] Captured network event:', event.method, event.path, event.status);
-    this.updateEventListUI();
+    this.render();
   }
 
   private safeParseBody(body: any): unknown {
@@ -175,33 +207,37 @@ class SayDoSDK {
       this.speechRecognition = new SpeechRecognition();
       this.speechRecognition.continuous = true;
       this.speechRecognition.interimResults = true;
-      this.speechRecognition.lang = 'en-IN'; // Indian English / Hinglish optimized
+      this.speechRecognition.lang = 'en-IN';
 
       this.speechRecognition.onresult = (event: any) => {
         let transcript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           transcript += event.results[i][0].transcript;
         }
-        this.narrationText = (this.narrationText + ' ' + transcript).trim();
-        this.updateNarrationUI();
+
+        if (this.activeTab === 'teach') {
+          this.narrationText = (this.narrationText + ' ' + transcript).trim();
+        } else {
+          this.chatInputText = (this.chatInputText + ' ' + transcript).trim();
+        }
+        this.render();
       };
 
-      this.speechRecognition.onerror = (err: any) => {
-        console.warn('[SayDo Speech] Speech recognition error:', err.error);
+      this.speechRecognition.onerror = () => {
         this.isListening = false;
-        this.updateMicButtonUI();
+        this.render();
       };
 
       this.speechRecognition.onend = () => {
         this.isListening = false;
-        this.updateMicButtonUI();
+        this.render();
       };
     }
   }
 
   private toggleSpeech() {
     if (!this.speechRecognition) {
-      alert('Web Speech API is not supported in this browser. You can type directly in the Tell box.');
+      alert('Speech recognition is not supported in this browser. Please type directly.');
       return;
     }
 
@@ -216,7 +252,7 @@ class SayDoSDK {
         console.warn('Speech start error:', e);
       }
     }
-    this.updateMicButtonUI();
+    this.render();
   }
 
   private mountWidget() {
@@ -230,6 +266,205 @@ class SayDoSDK {
     }
 
     this.shadowRoot = hostDiv.attachShadow({ mode: 'open' });
+  }
+
+  // Send message to SayDo Agent (/v1/chat)
+  public async submitUserPrompt(promptText: string) {
+    if (!promptText.trim() || this.isAgentBusy) return;
+
+    this.isAgentBusy = true;
+    this.chatInputText = '';
+
+    const userItem: ChatItem = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      text: promptText,
+    };
+    this.chatItems.push(userItem);
+    this.render();
+
+    await this.callChatApi();
+  }
+
+  private async callChatApi(pendingResult?: any) {
+    try {
+      // Build messages array
+      const apiMessages = this.chatItems
+        .filter((item) => item.text && (item.role === 'user' || item.role === 'assistant'))
+        .map((item) => ({
+          role: item.role,
+          content: item.text || '',
+        }));
+
+      const payload = {
+        app_key: this.config.publicKey,
+        messages: apiMessages,
+        pending_result: pendingResult,
+        run_id: this.currentRunId,
+        plan: this.activePlan,
+      };
+
+      const res = await fetch(`${this.config.apiUrl}/v1/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Agent request failed');
+      }
+
+      if (data.run_id) {
+        this.currentRunId = data.run_id;
+      }
+
+      if (data.plan) {
+        this.activePlan = data.plan;
+      }
+
+      if (data.type === 'tool_call') {
+        const toolItem: ChatItem = {
+          id: data.call_id || `call-${Date.now()}`,
+          role: 'tool',
+          toolCall: {
+            call_id: data.call_id,
+            skill: data.skill,
+            method: data.method,
+            path: data.path,
+            args: data.args,
+            check: data.check,
+            blocked: data.blocked,
+            needsConfirm: data.needsConfirm,
+            message: data.message,
+            is_verification: data.is_verification,
+            original_write: data.original_write,
+          },
+          status: data.blocked ? 'blocked' : 'pending',
+          verified: data.verified,
+          verificationNote: data.verification_note,
+        };
+        this.chatItems.push(toolItem);
+        this.render();
+
+        // Auto-run if read skill and allowed without confirmation!
+        if (!data.blocked && !data.needsConfirm) {
+          await this.executeToolCall(toolItem);
+        } else {
+          this.isAgentBusy = false;
+          this.render();
+        }
+      } else if (data.type === 'message') {
+        this.chatItems.push({
+          id: `msg-${Date.now()}`,
+          role: 'assistant',
+          text: data.text,
+          verified: data.verified,
+          verificationNote: data.verification_note,
+        });
+
+        // Mark all plan steps completed
+        if (this.activePlan) {
+          this.activePlan.steps.forEach((s) => (s.completed = true));
+        }
+
+        this.isAgentBusy = false;
+        this.render();
+      }
+    } catch (err: any) {
+      this.chatItems.push({
+        id: `err-${Date.now()}`,
+        role: 'assistant',
+        text: `Agent Error: ${err.message}`,
+      });
+      this.isAgentBusy = false;
+      this.render();
+    }
+  }
+
+  // Execute Tool Call in Browser Session with User Credentials
+  public async executeToolCall(item: ChatItem) {
+    if (!item.toolCall) return;
+
+    item.status = 'running';
+    this.isAgentBusy = true;
+    this.render();
+
+    const tc = item.toolCall;
+    const method = (tc.method || 'GET').toUpperCase();
+    let url = tc.path || '/';
+
+    // Build URL parameters for GET
+    if (method === 'GET' && tc.args && Object.keys(tc.args).length > 0) {
+      const searchParams = new URLSearchParams();
+      for (const [k, v] of Object.entries(tc.args)) {
+        if (v !== undefined && v !== null && v !== '') {
+          searchParams.append(k, String(v));
+        }
+      }
+      url = `${url}?${searchParams.toString()}`;
+    }
+
+    try {
+      const execRes = await window.fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: method !== 'GET' ? JSON.stringify(tc.args) : undefined,
+        credentials: 'include',
+      });
+
+      let responseData: any = null;
+      try {
+        responseData = await execRes.json();
+      } catch {
+        responseData = { status: execRes.status };
+      }
+
+      item.status = 'completed';
+
+      // Update plan step checkbox
+      if (this.activePlan) {
+        const step = this.activePlan.steps.find((s) => s.skill_name === tc.skill);
+        if (step) step.completed = true;
+      }
+
+      // Dispatch 'saydo:changed' event so host app (DEHIX-lite) refreshes in real-time
+      if (method !== 'GET') {
+        window.dispatchEvent(
+          new CustomEvent('saydo:changed', {
+            detail: { skill: tc.skill, args: tc.args, response: responseData },
+          })
+        );
+      }
+
+      // Post execution result back to /v1/chat to continue loop or trigger verifier
+      await this.callChatApi({
+        call_id: tc.call_id,
+        skill_name: tc.skill,
+        status: execRes.status,
+        response: responseData,
+        args: tc.args,
+        is_verification: tc.is_verification,
+        original_write: tc.original_write,
+      });
+    } catch (err: any) {
+      item.status = 'cancelled';
+      this.chatItems.push({
+        id: `err-${Date.now()}`,
+        role: 'assistant',
+        text: `Execution failed: ${err.message}`,
+      });
+      this.isAgentBusy = false;
+      this.render();
+    }
+  }
+
+  public cancelToolCall(item: ChatItem) {
+    item.status = 'cancelled';
+    this.isAgentBusy = false;
+    this.render();
   }
 
   private render() {
@@ -251,7 +486,7 @@ class SayDoSDK {
           box-sizing: border-box;
         }
 
-        /* Floating Launcher */
+        /* Launcher */
         .saydo-launcher {
           position: fixed;
           bottom: 24px;
@@ -279,26 +514,27 @@ class SayDoSDK {
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          background: ${this.isRecording ? '#ef4444' : '#10b981'};
-          box-shadow: 0 0 8px ${this.isRecording ? '#ef4444' : '#10b981'};
-          animation: ${this.isRecording ? 'pulse 1s infinite' : 'none'};
+          background: ${this.isRecording ? '#ef4444' : this.isAgentBusy ? '#f59e0b' : '#10b981'};
+          box-shadow: 0 0 8px ${this.isRecording ? '#ef4444' : this.isAgentBusy ? '#f59e0b' : '#10b981'};
+          animation: ${this.isRecording || this.isAgentBusy ? 'pulse 1s infinite' : 'none'};
         }
         @keyframes pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.4; transform: scale(1.2); }
         }
 
-        /* Modal Panel */
+        /* Panel */
         .saydo-panel {
           position: fixed;
           bottom: 76px;
           right: 24px;
-          width: 380px;
-          max-height: 560px;
+          width: 420px;
+          max-height: 600px;
+          height: 560px;
           background: #0b0f19;
           border: 1px solid #1e293b;
           border-radius: 20px;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
           z-index: 2147483647;
           display: ${this.isOpen ? 'flex' : 'none'};
           flex-direction: column;
@@ -310,7 +546,7 @@ class SayDoSDK {
           to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Panel Header */
+        /* Header */
         .saydo-header {
           padding: 14px 18px;
           background: #0f172a;
@@ -371,14 +607,225 @@ class SayDoSDK {
           color: #ffffff;
         }
 
-        /* Tab Content Body */
+        /* Body */
         .saydo-body {
-          padding: 16px;
+          flex: 1;
+          padding: 14px;
           overflow-y: auto;
           display: flex;
           flex-direction: column;
-          gap: 14px;
-          max-height: 440px;
+          gap: 12px;
+        }
+
+        /* Ask Agent Styles */
+        .saydo-plan-box {
+          background: #0d1527;
+          border: 1px solid rgba(59, 130, 246, 0.3);
+          border-radius: 12px;
+          padding: 10px 14px;
+          font-size: 12px;
+        }
+        .saydo-plan-title {
+          font-weight: 700;
+          color: #60a5fa;
+          margin-bottom: 6px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .saydo-step-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 3px 0;
+          color: #cbd5e1;
+        }
+        .saydo-step-done {
+          color: #10b981;
+          font-weight: 600;
+        }
+
+        .saydo-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-bottom: 4px;
+        }
+        .saydo-chip {
+          background: #1e293b;
+          border: 1px solid #334155;
+          color: #94a3b8;
+          padding: 5px 10px;
+          border-radius: 9999px;
+          font-size: 11px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          text-align: left;
+        }
+        .saydo-chip:hover {
+          background: #2563eb;
+          color: #ffffff;
+          border-color: #3b82f6;
+        }
+
+        /* Messages */
+        .saydo-msg-user {
+          align-self: flex-end;
+          background: #1e3a8a;
+          color: #eff6ff;
+          padding: 8px 12px;
+          border-radius: 14px 14px 2px 14px;
+          max-width: 85%;
+          font-size: 12px;
+        }
+        .saydo-msg-assistant {
+          align-self: flex-start;
+          background: #131b2e;
+          border: 1px solid #1e293b;
+          color: #e2e8f0;
+          padding: 10px 14px;
+          border-radius: 14px 14px 14px 2px;
+          max-width: 90%;
+          font-size: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        /* Tool Cards */
+        .saydo-card-confirm {
+          border-radius: 12px;
+          border: 1px solid #3b82f6;
+          background: #0f172a;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+        }
+        .saydo-card-blocked {
+          border-radius: 12px;
+          border: 1px solid #ef4444;
+          background: #450a0a;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+        }
+        .saydo-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-weight: 700;
+          font-size: 12px;
+        }
+        .saydo-args-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 11px;
+          background: rgba(0, 0, 0, 0.3);
+          border-radius: 6px;
+          overflow: hidden;
+        }
+        .saydo-args-table td {
+          padding: 4px 8px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .saydo-card-btns {
+          display: flex;
+          gap: 8px;
+          margin-top: 4px;
+        }
+        .saydo-btn-confirm {
+          flex: 1;
+          background: #2563eb;
+          color: #ffffff;
+          padding: 8px;
+          border: none;
+          border-radius: 8px;
+          font-size: 11px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .saydo-btn-confirm:hover { background: #1d4ed8; }
+        .saydo-btn-cancel {
+          background: #334155;
+          color: #cbd5e1;
+          padding: 8px 12px;
+          border: none;
+          border-radius: 8px;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .saydo-btn-cancel:hover { background: #475569; }
+
+        .saydo-badge-verified {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background: rgba(16, 185, 129, 0.15);
+          color: #34d399;
+          border: 1px solid rgba(16, 185, 129, 0.3);
+          padding: 3px 8px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        /* Footer Input */
+        .saydo-footer {
+          padding: 10px 14px;
+          background: #0f172a;
+          border-top: 1px solid #1e293b;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .saydo-chat-input {
+          flex: 1;
+          background: #070a12;
+          border: 1px solid #1e293b;
+          border-radius: 10px;
+          padding: 8px 12px;
+          color: #f8fafc;
+          font-size: 12px;
+          outline: none;
+        }
+        .saydo-chat-input:focus {
+          border-color: #3b82f6;
+        }
+        .saydo-icon-btn {
+          background: #1e293b;
+          border: 1px solid #334155;
+          color: #cbd5e1;
+          border-radius: 8px;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          font-size: 14px;
+        }
+        .saydo-icon-btn.active {
+          background: #ef4444;
+          color: #ffffff;
+        }
+        .saydo-send-btn {
+          background: #2563eb;
+          color: #ffffff;
+          border: none;
+          border-radius: 8px;
+          padding: 8px 14px;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .saydo-send-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
 
         /* Teach View Elements */
@@ -405,18 +852,9 @@ class SayDoSDK {
           font-weight: 600;
           border: none;
           cursor: pointer;
-          transition: all 0.15s ease;
         }
-        .saydo-rec-btn.start {
-          background: #ef4444;
-          color: #ffffff;
-        }
-        .saydo-rec-btn.stop {
-          background: #334155;
-          color: #f1f5f9;
-        }
-
-        /* Form Inputs */
+        .saydo-rec-btn.start { background: #ef4444; color: #ffffff; }
+        .saydo-rec-btn.stop { background: #334155; color: #f1f5f9; }
         .saydo-label {
           font-size: 11px;
           font-weight: 600;
@@ -436,37 +874,6 @@ class SayDoSDK {
           outline: none;
           font-family: inherit;
         }
-        .saydo-input:focus, .saydo-textarea:focus {
-          border-color: #3b82f6;
-          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-        }
-
-        /* Tell Box & Mic */
-        .saydo-tell-box {
-          position: relative;
-        }
-        .saydo-mic-btn {
-          position: absolute;
-          right: 8px;
-          bottom: 8px;
-          width: 30px;
-          height: 30px;
-          border-radius: 50%;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: ${this.isListening ? '#ef4444' : '#1e293b'};
-          color: #ffffff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          font-size: 13px;
-          transition: all 0.2s ease;
-        }
-        .saydo-mic-btn:hover {
-          background: ${this.isListening ? '#dc2626' : '#2563eb'};
-        }
-
-        /* Captured Events Feed */
         .saydo-events-box {
           display: flex;
           flex-direction: column;
@@ -483,27 +890,8 @@ class SayDoSDK {
           font-size: 11px;
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         }
-        .saydo-method {
-          font-weight: bold;
-          color: #60a5fa;
-        }
-        .saydo-path {
-          color: #cbd5e1;
-          margin-left: 6px;
-          max-width: 200px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .saydo-status {
-          font-size: 10px;
-          color: #10b981;
-          padding: 1px 5px;
-          border-radius: 4px;
-          background: rgba(16, 185, 129, 0.1);
-        }
-
-        /* Save Button */
+        .saydo-method { font-weight: bold; color: #60a5fa; }
+        .saydo-path { color: #cbd5e1; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
         .saydo-save-btn {
           padding: 10px;
           background: #2563eb;
@@ -513,35 +901,14 @@ class SayDoSDK {
           font-size: 12px;
           font-weight: 600;
           cursor: pointer;
-          transition: background 0.15s ease;
         }
-        .saydo-save-btn:hover {
-          background: #1d4ed8;
-        }
-        .saydo-save-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        /* Ask View */
-        .saydo-ask-container {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          text-align: center;
-          padding: 10px 0;
-        }
-        .saydo-ask-hint {
-          font-size: 12px;
-          color: #94a3b8;
-          line-height: 1.5;
-        }
+        .saydo-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       </style>
 
       <!-- Launcher Button -->
       <button class="saydo-launcher" id="saydo-launcher">
         <span class="saydo-indicator"></span>
-        <span>${this.isRecording ? 'Recording (SayDo)' : 'SayDo Agent'}</span>
+        <span>${this.isRecording ? 'Recording (SayDo)' : this.isAgentBusy ? 'SayDo Working...' : 'SayDo Agent'}</span>
       </button>
 
       <!-- Panel -->
@@ -569,7 +936,7 @@ class SayDoSDK {
             : ''
         }
 
-        <div class="saydo-body">
+        <div class="saydo-body" id="saydo-body">
           ${
             this.activeTab === 'teach' && isTeachAvailable
               ? `
@@ -597,14 +964,14 @@ class SayDoSDK {
 
             <div>
               <div class="saydo-label">Tell Narration (Wispr / Voice Mic)</div>
-              <div class="saydo-tell-box">
+              <div style="position: relative;">
                 <textarea 
                   class="saydo-textarea" 
                   id="textarea-narration" 
                   rows="3" 
-                  placeholder="Talk aloud while doing the task... e.g. 'I am setting the budget to 2 lakh and creating the project.'"
+                  placeholder="Talk aloud while doing the task..."
                 >${this.narrationText}</textarea>
-                <button class="saydo-mic-btn" id="btn-mic" title="Dictate by voice (Web Speech API / Wispr)">
+                <button class="saydo-icon-btn" id="btn-mic-teach" style="position: absolute; right: 8px; bottom: 8px;" title="Dictate voice">
                   ${this.isListening ? '🛑' : '🎙️'}
                 </button>
               </div>
@@ -612,7 +979,7 @@ class SayDoSDK {
 
             <div>
               <div class="saydo-label">Captured Network Calls (${this.recordedEvents.length})</div>
-              <div class="saydo-events-box" id="events-list">
+              <div class="saydo-events-box">
                 ${
                   this.recordedEvents.length === 0
                     ? `<div style="font-size: 11px; color: #64748b; font-style: italic; padding: 4px;">Click 'Record Task' and interact with DEHIX-lite. API calls appear here live.</div>`
@@ -624,7 +991,7 @@ class SayDoSDK {
                             <span class="saydo-method">${ev.method}</span>
                             <span class="saydo-path" title="${ev.path}">${ev.path}</span>
                           </div>
-                          <span class="saydo-status">${ev.status}</span>
+                          <span style="color: #10b981; font-size: 10px;">${ev.status}</span>
                         </div>
                       `
                         )
@@ -633,32 +1000,185 @@ class SayDoSDK {
               </div>
             </div>
 
-            <button 
-              class="saydo-save-btn" 
-              id="btn-save-recording" 
-              ${this.recordedEvents.length === 0 ? 'disabled' : ''}
-            >
+            <button class="saydo-save-btn" id="btn-save-recording" ${this.recordedEvents.length === 0 ? 'disabled' : ''}>
               Stop & Save to SayDo
             </button>
           `
               : `
-            <!-- Ask View -->
-            <div class="saydo-ask-container">
-              <div style="font-size: 28px;">🤖</div>
-              <div style="font-weight: 700; color: #ffffff; font-size: 15px;">Ask SayDo Agent</div>
-              <p class="saydo-ask-hint">
-                SayDo knows this app's typed skills and spoken policies. Ask anything by voice or text.
-              </p>
-              <textarea 
-                class="saydo-textarea" 
-                rows="3" 
-                placeholder="e.g. 'Create a new project for Website Revamp with 2 lakh budget'"
-              ></textarea>
-              <button class="saydo-save-btn">Run with User Session</button>
-            </div>
+            <!-- Ask Agent View -->
+            ${
+              this.activePlan
+                ? `
+              <div class="saydo-plan-box">
+                <div class="saydo-plan-title">
+                  <span>📋 Execution Plan</span>
+                </div>
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">${this.activePlan.summary}</div>
+                ${this.activePlan.steps
+                  .map(
+                    (s) => `
+                  <div class="saydo-step-row ${s.completed ? 'saydo-step-done' : ''}">
+                    <span>${s.completed ? '✓' : '○'}</span>
+                    <span><strong>Step ${s.idx}:</strong> ${s.description || s.skill_name}</span>
+                  </div>
+                `
+                  )
+                  .join('')}
+              </div>
+            `
+                : `
+              <div style="font-size: 11px; color: #94a3b8; font-weight: 600;">SUGGESTED PROMPTS</div>
+              <div class="saydo-chips">
+                <button class="saydo-chip" data-prompt="Create Website Revamp with 2 lakh budget and invite arpit@dehix.org as editor">
+                  ⚡ Create Website Revamp (2L) & invite arpit@dehix.org
+                </button>
+                <button class="saydo-chip" data-prompt="Create a project with 20 lakh budget">
+                  🛑 Create 20 lakh project (test policy limit)
+                </button>
+                <button class="saydo-chip" data-prompt="Show pending applications">
+                  🔍 Show pending applications
+                </button>
+                <button class="saydo-chip" data-prompt="Invite arpit@dehix.org as admin">
+                  🛡️ Invite arpit@dehix.org as admin (test role block)
+                </button>
+              </div>
+            `
+            }
+
+            <!-- Messages Stream -->
+            ${this.chatItems
+              .map((item) => {
+                if (item.role === 'user') {
+                  return `<div class="saydo-msg-user">${item.text}</div>`;
+                }
+
+                if (item.toolCall) {
+                  const tc = item.toolCall;
+                  if (tc.blocked) {
+                    return `
+                      <div class="saydo-card-blocked">
+                        <div class="saydo-card-header" style="color: #f87171;">
+                          <span>🛑 Action Blocked by Platform Policy</span>
+                          <span>${tc.skill}</span>
+                        </div>
+                        <div style="font-size: 11px; color: #fca5a5;">${tc.message || 'Blocked by security policy.'}</div>
+                        <table class="saydo-args-table">
+                          ${Object.entries(tc.args || {})
+                            .map(([k, v]) => `<tr><td style="color:#94a3b8;">${k}</td><td>${v}</td></tr>`)
+                            .join('')}
+                        </table>
+                      </div>
+                    `;
+                  }
+
+                  if (item.status === 'pending') {
+                    return `
+                      <div class="saydo-card-confirm" data-call-id="${tc.call_id}">
+                        <div class="saydo-card-header" style="color: #60a5fa;">
+                          <span>⚠️ Confirmation Required</span>
+                          <span style="font-size: 10px; background: rgba(59, 130, 246, 0.2); padding: 2px 6px; border-radius: 4px;">WRITE</span>
+                        </div>
+                        <div style="font-size: 12px; font-weight: 600; color: #f8fafc;">Action: ${tc.skill}</div>
+                        <table class="saydo-args-table">
+                          ${Object.entries(tc.args || {})
+                            .map(
+                              ([k, v]) => `
+                            <tr>
+                              <td style="color: #94a3b8; width: 35%;">${k}</td>
+                              <td style="color: #f8fafc; font-weight: 500;">
+                                ${k === 'budget' ? '₹' + Number(v).toLocaleString('en-IN') : v}
+                              </td>
+                            </tr>
+                          `
+                            )
+                            .join('')}
+                        </table>
+                        <div style="font-size: 10px; color: #94a3b8;">
+                          🔒 Policy notice: Writes execute using your browser session.
+                        </div>
+                        <div class="saydo-card-btns">
+                          <button class="saydo-btn-confirm" data-action="confirm" data-id="${item.id}">
+                            ✓ Confirm & Execute
+                          </button>
+                          <button class="saydo-btn-cancel" data-action="cancel" data-id="${item.id}">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    `;
+                  }
+
+                  if (item.status === 'running') {
+                    return `
+                      <div class="saydo-msg-assistant" style="opacity: 0.8;">
+                        <div>⏳ Executing <strong>${tc.skill}</strong> in your browser...</div>
+                      </div>
+                    `;
+                  }
+
+                  if (item.status === 'completed') {
+                    return `
+                      <div class="saydo-msg-assistant">
+                        <div style="color: #94a3b8; font-size: 11px;">✓ Executed ${tc.skill}</div>
+                        ${
+                          item.verified
+                            ? `<div class="saydo-badge-verified">✓ ${item.verificationNote || 'Verified in system'}</div>`
+                            : ''
+                        }
+                      </div>
+                    `;
+                  }
+                }
+
+                return `
+                  <div class="saydo-msg-assistant">
+                    <div>${item.text}</div>
+                    ${
+                      item.verified
+                        ? `<div class="saydo-badge-verified">✓ ${item.verificationNote || 'Verified in system'}</div>`
+                        : ''
+                    }
+                  </div>
+                `;
+              })
+              .join('')}
+
+            ${
+              this.isAgentBusy
+                ? `
+              <div class="saydo-msg-assistant" style="align-items: center; justify-content: center; padding: 8px;">
+                <span class="saydo-indicator"></span>
+                <span style="font-size: 11px; color: #94a3b8; margin-left: 6px;">SayDo is reasoning...</span>
+              </div>
+            `
+                : ''
+            }
           `
           }
         </div>
+
+        ${
+          this.activeTab === 'ask'
+            ? `
+          <!-- Footer Chat Input -->
+          <div class="saydo-footer">
+            <input 
+              type="text" 
+              class="saydo-chat-input" 
+              id="input-chat" 
+              placeholder="Ask by voice or text... e.g. 'Create project with 2 lakh budget'" 
+              value="${this.chatInputText}"
+            />
+            <button class="saydo-icon-btn ${this.isListening ? 'active' : ''}" id="btn-mic-ask" title="Dictate voice (Web Speech API / Wispr)">
+              ${this.isListening ? '🛑' : '🎙️'}
+            </button>
+            <button class="saydo-send-btn" id="btn-send-chat" ${this.isAgentBusy ? 'disabled' : ''}>
+              Send
+            </button>
+          </div>
+        `
+            : ''
+        }
       </div>
     `;
 
@@ -669,127 +1189,104 @@ class SayDoSDK {
     if (!this.shadowRoot) return;
 
     // Toggle Panel
-    const launcher = this.shadowRoot.getElementById('saydo-launcher');
-    launcher?.addEventListener('click', () => {
+    this.shadowRoot.getElementById('saydo-launcher')?.addEventListener('click', () => {
       this.isOpen = !this.isOpen;
       this.render();
     });
 
-    const closeBtn = this.shadowRoot.getElementById('saydo-close');
-    closeBtn?.addEventListener('click', () => {
+    this.shadowRoot.getElementById('saydo-close')?.addEventListener('click', () => {
       this.isOpen = false;
       this.render();
     });
 
     // Tab Switchers
-    const tabAsk = this.shadowRoot.getElementById('tab-ask');
-    tabAsk?.addEventListener('click', () => {
+    this.shadowRoot.getElementById('tab-ask')?.addEventListener('click', () => {
       this.activeTab = 'ask';
       this.render();
     });
 
-    const tabTeach = this.shadowRoot.getElementById('tab-teach');
-    tabTeach?.addEventListener('click', () => {
+    this.shadowRoot.getElementById('tab-teach')?.addEventListener('click', () => {
       this.activeTab = 'teach';
       this.render();
     });
 
-    // Recording Toggle
-    const recToggle = this.shadowRoot.getElementById('btn-toggle-rec');
-    recToggle?.addEventListener('click', () => {
+    // Teach Handlers
+    this.shadowRoot.getElementById('btn-toggle-rec')?.addEventListener('click', () => {
       if (this.isRecording) {
-        this.stopRecording();
+        this.isRecording = false;
       } else {
-        this.startRecording();
+        this.isRecording = true;
+        this.recordedEvents = [];
       }
       this.render();
     });
 
-    // Mic Toggle
-    const micBtn = this.shadowRoot.getElementById('btn-mic');
-    micBtn?.addEventListener('click', () => {
-      this.toggleSpeech();
-    });
+    this.shadowRoot.getElementById('btn-mic-teach')?.addEventListener('click', () => this.toggleSpeech());
+    this.shadowRoot.getElementById('btn-mic-ask')?.addEventListener('click', () => this.toggleSpeech());
 
-    // Inputs Sync
-    const titleInput = this.shadowRoot.getElementById('input-title') as HTMLInputElement | null;
-    titleInput?.addEventListener('input', (e) => {
+    this.shadowRoot.getElementById('input-title')?.addEventListener('input', (e) => {
       this.recordingTitle = (e.target as HTMLInputElement).value;
     });
 
-    const narrationInput = this.shadowRoot.getElementById('textarea-narration') as HTMLTextAreaElement | null;
-    narrationInput?.addEventListener('input', (e) => {
+    this.shadowRoot.getElementById('textarea-narration')?.addEventListener('input', (e) => {
       this.narrationText = (e.target as HTMLTextAreaElement).value;
     });
 
-    // Save Action
-    const saveBtn = this.shadowRoot.getElementById('btn-save-recording');
-    saveBtn?.addEventListener('click', () => {
-      this.saveRecording();
+    this.shadowRoot.getElementById('btn-save-recording')?.addEventListener('click', () => this.saveRecording());
+
+    // Ask Agent Handlers
+    const chatInput = this.shadowRoot.getElementById('input-chat') as HTMLInputElement | null;
+    chatInput?.addEventListener('input', (e) => {
+      this.chatInputText = (e.target as HTMLInputElement).value;
     });
-  }
 
-  private updateEventListUI() {
-    if (!this.shadowRoot) return;
-    const listEl = this.shadowRoot.getElementById('events-list');
-    const saveBtn = this.shadowRoot.getElementById('btn-save-recording') as HTMLButtonElement | null;
+    chatInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        this.submitUserPrompt(this.chatInputText);
+      }
+    });
 
-    if (listEl) {
-      listEl.innerHTML = this.recordedEvents
-        .map(
-          (ev) => `
-        <div class="saydo-event-item">
-          <div>
-            <span class="saydo-method">${ev.method}</span>
-            <span class="saydo-path" title="${ev.path}">${ev.path}</span>
-          </div>
-          <span class="saydo-status">${ev.status}</span>
-        </div>
-      `
-        )
-        .join('');
-    }
+    this.shadowRoot.getElementById('btn-send-chat')?.addEventListener('click', () => {
+      this.submitUserPrompt(this.chatInputText);
+    });
 
-    if (saveBtn) {
-      saveBtn.disabled = this.recordedEvents.length === 0;
-    }
-  }
+    // Prompt Chips
+    this.shadowRoot.querySelectorAll('.saydo-chip').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const prompt = btn.getAttribute('data-prompt');
+        if (prompt) this.submitUserPrompt(prompt);
+      });
+    });
 
-  private updateNarrationUI() {
-    if (!this.shadowRoot) return;
-    const textarea = this.shadowRoot.getElementById('textarea-narration') as HTMLTextAreaElement | null;
-    if (textarea) {
-      textarea.value = this.narrationText;
-    }
-  }
+    // Tool Confirmation Buttons
+    this.shadowRoot.querySelectorAll('[data-action="confirm"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        const item = this.chatItems.find((i) => i.id === id);
+        if (item) this.executeToolCall(item);
+      });
+    });
 
-  private updateMicButtonUI() {
-    if (!this.shadowRoot) return;
-    const btn = this.shadowRoot.getElementById('btn-mic');
-    if (btn) {
-      btn.textContent = this.isListening ? '🛑' : '🎙️';
-      btn.style.background = this.isListening ? '#ef4444' : '#1e293b';
+    this.shadowRoot.querySelectorAll('[data-action="cancel"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        const item = this.chatItems.find((i) => i.id === id);
+        if (item) this.cancelToolCall(item);
+      });
+    });
+
+    // Auto-scroll messages body to bottom
+    const bodyEl = this.shadowRoot.getElementById('saydo-body');
+    if (bodyEl) {
+      bodyEl.scrollTop = bodyEl.scrollHeight;
     }
   }
 
-  public startRecording() {
-    this.isRecording = true;
-    this.recordedEvents = [];
-    console.log('[SayDo SDK] Recording started...');
-  }
+  private async saveRecording() {
+    if (this.recordedEvents.length === 0) return;
 
-  public stopRecording() {
-    this.isRecording = false;
-    console.log('[SayDo SDK] Recording stopped. Total events:', this.recordedEvents.length);
-  }
-
-  public async saveRecording() {
-    this.stopRecording();
-
-    const title = this.recordingTitle.trim() || 'Recorded Task ' + new Date().toLocaleTimeString();
+    const title = this.recordingTitle.trim() || `Recording ${new Date().toLocaleTimeString()}`;
     const narration = this.narrationText.trim();
-
-    // Client-side Sanitization
     const sanitized = sanitizeEvents(this.recordedEvents);
 
     const payload = {
@@ -810,9 +1307,7 @@ class SayDoSDK {
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to save recording');
-      }
+      if (!res.ok) throw new Error(data.error || 'Failed to save recording');
 
       alert(`✅ Recording "${title}" successfully stored in SayDo! (${data.event_count} sanitized events)`);
       this.recordedEvents = [];

@@ -101,3 +101,64 @@ export const AgentPlanSchema = z.object({
   steps: z.array(AgentPlanStepSchema),
   summary: z.string(),
 });
+
+export const ChatMessageSchema = z.object({
+  role: z.enum(['system', 'user', 'assistant', 'tool']),
+  content: z.string().default(''),
+  tool_call_id: z.string().optional(),
+  name: z.string().optional(),
+});
+
+export const ChatPendingResultSchema = z.object({
+  call_id: z.string(),
+  skill_name: z.string(),
+  status: z.number().int(),
+  response: z.any().optional(),
+});
+
+export const ChatRequestSchema = z.object({
+  app_key: z.string(),
+  messages: z.array(ChatMessageSchema),
+  pending_result: ChatPendingResultSchema.optional(),
+});
+
+export const ChatToolCallResponseSchema = z.object({
+  type: z.literal('tool_call'),
+  call_id: z.string(),
+  skill: z.string(),
+  method: HttpMethodSchema.optional(),
+  path: z.string().optional(),
+  args: z.record(z.any()).default({}),
+  check: z.object({
+    allowed: z.boolean(),
+    needsConfirm: z.boolean(),
+    violations: z.array(
+      z.object({
+        policyId: z.string(),
+        message: z.string(),
+        kind: PolicyKindSchema,
+        field: z.string().nullable().optional(),
+      })
+    ),
+  }),
+  plan: AgentPlanSchema.optional(),
+  verified: z.boolean().optional(),
+  verification_note: z.string().optional(),
+  blocked: z.boolean().optional(),
+  message: z.string().optional(),
+});
+
+export const ChatMessageResponseSchema = z.object({
+  type: z.literal('message'),
+  text: z.string(),
+  plan: AgentPlanSchema.optional(),
+  sources: z.array(z.any()).optional(),
+  verified: z.boolean().optional(),
+  verification_note: z.string().optional(),
+});
+
+export const ChatResponseSchema = z.union([
+  ChatToolCallResponseSchema,
+  ChatMessageResponseSchema,
+]);
+

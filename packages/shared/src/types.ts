@@ -101,3 +101,62 @@ export interface CompileResult {
   tracer_edges: TracerEdge[];
 }
 
+export interface AgentPlanStep {
+  idx: number;
+  skill_name: string;
+  description: string;
+  args?: Record<string, any>;
+}
+
+export interface AgentPlan {
+  steps: AgentPlanStep[];
+  summary: string;
+}
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string;
+  tool_call_id?: string;
+  name?: string;
+}
+
+export interface ChatPendingResult {
+  call_id: string;
+  skill_name: string;
+  status: number;
+  response?: any;
+}
+
+export interface ChatRequest {
+  app_key: string;
+  messages: ChatMessage[];
+  pending_result?: ChatPendingResult;
+}
+
+export interface ChatToolCallResponse {
+  type: 'tool_call';
+  call_id: string;
+  skill: string;
+  method?: HttpMethod;
+  path?: string;
+  args: Record<string, any>;
+  check: PolicyEvaluationResult;
+  plan?: AgentPlan;
+  verified?: boolean;
+  verification_note?: string;
+  blocked?: boolean;
+  message?: string;
+}
+
+export interface ChatMessageResponse {
+  type: 'message';
+  text: string;
+  plan?: AgentPlan;
+  sources?: any[];
+  verified?: boolean;
+  verification_note?: string;
+}
+
+export type ChatResponse = ChatToolCallResponse | ChatMessageResponse;
+
+

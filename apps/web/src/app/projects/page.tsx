@@ -59,6 +59,15 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     fetchProjects();
+
+    const handleSayDoChange = () => {
+      fetchProjects();
+    };
+
+    window.addEventListener('saydo:changed', handleSayDoChange);
+    return () => {
+      window.removeEventListener('saydo:changed', handleSayDoChange);
+    };
   }, []);
 
   const handleCreateProject = async (e: React.FormEvent) => {

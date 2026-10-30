@@ -147,8 +147,109 @@ export const mockDb = {
         created_at: new Date().toISOString(),
       },
     ],
+    [
+      '55555555-5555-5555-5555-555555555555',
+      {
+        id: '55555555-5555-5555-5555-555555555555',
+        app_id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
+        name: 'list_applications',
+        version: 1,
+        title: 'List Talent Applications',
+        description: 'Retrieve talent applications for Web3 bounties and roles, optionally filtered by status or project_id',
+        method: 'GET',
+        path: '/api/dehix/applications',
+        query_params: ['status', 'project_id'],
+        inputs: {
+          status: { type: 'string', required: false, enum: ['pending', 'approved', 'rejected'], description: 'Filter by status' },
+          project_id: { type: 'string', required: false, description: 'Filter by project ID' },
+        },
+        constants: {},
+        outputs: { applications: 'array' },
+        depends_on: [],
+        is_write: false,
+        verify_with: null,
+        status: 'active',
+        created_at: new Date().toISOString(),
+      },
+    ],
+    [
+      '66666666-6666-6666-6666-666666666666',
+      {
+        id: '66666666-6666-6666-6666-666666666666',
+        app_id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
+        name: 'update_application_decision',
+        version: 1,
+        title: 'Update Application Decision',
+        description: 'Approve or reject a talent application',
+        method: 'POST',
+        path: '/api/dehix/applications/decision',
+        query_params: [],
+        inputs: {
+          application_id: { type: 'string', required: true, description: 'Application ID UUID' },
+          decision: { type: 'string', required: true, enum: ['approved', 'rejected'], description: 'Decision (approved or rejected)' },
+        },
+        constants: {},
+        outputs: { application: 'object', message: 'string' },
+        depends_on: [],
+        is_write: true,
+        verify_with: null,
+        status: 'active',
+        created_at: new Date().toISOString(),
+      },
+    ],
   ]),
-  policies: new Map<string, any>(),
+  policies: new Map<string, any>([
+    [
+      'pol-budget-limit',
+      {
+        id: 'pol-budget-limit',
+        app_id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
+        skill_name: 'create_project',
+        kind: 'limit',
+        field: 'budget',
+        op: 'lte',
+        value: 1000000,
+        message: 'Project budget cannot exceed ₹10,00,000 INR per platform policy.',
+        spoken: 'Budget can never exceed 10 lakh',
+        source: 'voice',
+        created_at: new Date().toISOString(),
+      },
+    ],
+    [
+      'pol-admin-block',
+      {
+        id: 'pol-admin-block',
+        app_id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
+        skill_name: 'invite_member',
+        kind: 'block',
+        field: 'role',
+        op: 'eq',
+        value: 'admin',
+        message: 'Autonomous agents cannot assign administrator privileges without out-of-band admin confirmation.',
+        spoken: 'Never invite admins through the assistant',
+        source: 'voice',
+        created_at: new Date().toISOString(),
+      },
+    ],
+    [
+      'pol-reject-confirm',
+      {
+        id: 'pol-reject-confirm',
+        app_id: 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380b22',
+        skill_name: 'update_application_decision',
+        kind: 'confirm',
+        field: 'decision',
+        op: 'eq',
+        value: 'rejected',
+        message: 'User confirmation required before recording a rejection decision.',
+        spoken: 'Always ask before rejecting an application',
+        source: 'voice',
+        created_at: new Date().toISOString(),
+      },
+    ],
+  ]),
+  runs: new Map<string, any>(),
+  run_steps: new Map<string, any>(),
 };
 
 export async function getAppByPublicKey(publicKey: string) {
@@ -319,6 +420,106 @@ export async function deletePolicy(id: string): Promise<boolean> {
   }
   return mockDb.policies.delete(id);
 }
+
+export async function saveRun(data: {
+  id?: string;
+  app_id: string;
+  user_message: string;
+  plan?: any;
+  status?: 'running' | 'completed' | 'failed' | 'blocked';
+  model_agent: string;
+  model_reason?: string;
+  total_ms?: number;
+}) {
+  const sb = getSupabase();
+  const id = data.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `run-${Date.now()}`);
+  const record = {
+    id,
+    app_id: data.app_id,
+    user_message: data.user_message,
+    plan: data.plan || [],
+    status: data.status || 'running',
+    model_agent: data.model_agent,
+    model_reason: data.model_reason || null,
+    total_ms: data.total_ms || 0,
+    created_at: new Date().toISOString(),
+  };
+
+  if (sb) {
+    const { data: inserted, error } = await sb.from('runs').upsert([record]).select().single();
+    if (!error && inserted) return inserted;
+  }
+
+  mockDb.runs.set(id, record);
+  return record;
+}
+
+export async function updateRunStatus(id: string, status: 'running' | 'completed' | 'failed' | 'blocked', total_ms?: number) {
+  const sb = getSupabase();
+  if (sb) {
+    const updateObj: any = { status };
+    if (typeof total_ms === 'number') updateObj.total_ms = total_ms;
+    const { data, error } = await sb.from('runs').update(updateObj).eq('id', id).select().single();
+    if (!error && data) return data;
+  }
+
+  const existing = mockDb.runs.get(id);
+  if (existing) {
+    existing.status = status;
+    if (typeof total_ms === 'number') existing.total_ms = total_ms;
+    return existing;
+  }
+  return null;
+}
+
+export async function saveRunStep(data: {
+  run_id: string;
+  idx: number;
+  skill_name: string;
+  args?: any;
+  policy_result?: any;
+  confirmed?: boolean;
+  http_status?: number;
+  response?: any;
+  verified?: boolean;
+  latency_ms?: number;
+}) {
+  const sb = getSupabase();
+  const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `step-${Date.now()}-${data.idx}`;
+  const record = {
+    id,
+    run_id: data.run_id,
+    idx: data.idx,
+    skill_name: data.skill_name,
+    args: data.args || {},
+    policy_result: data.policy_result || {},
+    confirmed: data.confirmed || false,
+    http_status: data.http_status || 200,
+    response: data.response || null,
+    verified: data.verified || false,
+    latency_ms: data.latency_ms || 0,
+    created_at: new Date().toISOString(),
+  };
+
+  if (sb) {
+    const { data: inserted, error } = await sb.from('run_steps').insert([record]).select().single();
+    if (!error && inserted) return inserted;
+  }
+
+  mockDb.run_steps.set(id, record);
+  return record;
+}
+
+export async function getRunSteps(run_id: string) {
+  const sb = getSupabase();
+  if (sb) {
+    const { data, error } = await sb.from('run_steps').select('*').eq('run_id', run_id).order('idx', { ascending: true });
+    if (!error && data) return data;
+  }
+
+  return Array.from(mockDb.run_steps.values()).filter((s) => s.run_id === run_id).sort((a, b) => a.idx - b.idx);
+}
+
 
 
 

@@ -44,6 +44,15 @@ export default function ApplicationsPage() {
 
   useEffect(() => {
     fetchApplications();
+
+    const handleSayDoChange = () => {
+      fetchApplications();
+    };
+
+    window.addEventListener('saydo:changed', handleSayDoChange);
+    return () => {
+      window.removeEventListener('saydo:changed', handleSayDoChange);
+    };
   }, [statusFilter]);
 
   const handleDecision = async (applicationId: string, decision: 'accepted' | 'rejected') => {
